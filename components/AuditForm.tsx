@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AuditRequest } from '../types.ts';
 
-const N8N_WEBHOOK_URL = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook-test/9ba196f8-c567-4e4a-b424-4ede63310955';
+const N8N_WEBHOOK_URL = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955';
 
 const AuditForm: React.FC = () => {
   const [formData, setFormData] = useState<AuditRequest>({
