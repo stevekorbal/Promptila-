@@ -15,7 +15,7 @@ async function startServer() {
   // Webhook forwarder for Get Your Free AI Report form
   app.post("/api/audit-webhook", async (req, res) => {
     try {
-      const webhookUrl = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook-test/9ba196f8-c567-4e4a-b424-4ede63310955";
+      const webhookUrl = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955";
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",
         headers: {
