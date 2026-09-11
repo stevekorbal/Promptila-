@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { AuditRequest } from '../types.ts';
 
+const N8N_WEBHOOK_URL = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook-test/9ba196f8-c567-4e4a-b424-4ede63310955';
+
 const AuditForm: React.FC = () => {
   const [formData, setFormData] = useState<AuditRequest>({
     full_name: '',
@@ -25,21 +27,37 @@ const AuditForm: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
 
+    const payload = {
+      ...formData,
+      name: formData.full_name,
+      company: formData.business_name,
+      submitted_at: new Date().toISOString()
+    };
+
     try {
-      const payload = {
-        ...formData,
-        submitted_at: new Date().toISOString()
-      };
+      let response: Response | null = null;
+      try {
+        // First try sending directly to the configured n8n webhook
+        response = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      } catch (directError) {
+        // If direct fetch is blocked by browser CORS restrictions, fall back to backend proxy route
+        console.warn('Direct webhook fetch failed (possibly CORS), routing via proxy:', directError);
+        response = await fetch('/api/audit-webhook', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      }
 
-      const response = await fetch('https://hook.us2.make.com/q6qrftk18xuc86ywq7qecp65sk06k8lx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
+      if (response && response.ok) {
         setIsSubmitted(true);
         setFormData({
           full_name: '',
@@ -49,11 +67,22 @@ const AuditForm: React.FC = () => {
           industry: '',
           location: '',
         });
+      } else if (response) {
+        let errorMessage = 'Something went wrong. Please try again.';
+        try {
+          const errorData = await response.json();
+          if (errorData?.hint) {
+            errorMessage = errorData.hint;
+          } else if (errorData?.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (_) {}
+        setError(errorMessage);
       } else {
-        setError('Something went wrong. Please try again.');
+        setError('Failed to connect to the server. Please check your internet connection.');
       }
-    } catch (err) {
-      setError('Failed to connect to the server. Please check your internet connection.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to connect to the server. Please check your internet connection.');
     } finally {
       setIsSubmitting(false);
     }

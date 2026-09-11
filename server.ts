@@ -12,6 +12,37 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  // Webhook forwarder for Get Your Free AI Report form
+  app.post("/api/audit-webhook", async (req, res) => {
+    try {
+      const webhookUrl = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook-test/9ba196f8-c567-4e4a-b424-4ede63310955";
+      const webhookResponse = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req.body),
+      });
+
+      const responseText = await webhookResponse.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { message: responseText };
+      }
+
+      res.status(webhookResponse.status).json(responseData);
+    } catch (err: any) {
+      console.error("Webhook forwarding error:", err);
+      res.status(502).json({
+        code: 502,
+        error: "Failed to connect to the webhook destination",
+        message: err?.message || String(err),
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
