@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Lock, Mail, ArrowRight, Sparkles, AlertCircle, ShieldCheck, Check } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Lock, Mail, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 
 const Login: React.FC = () => {
@@ -9,10 +9,8 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, setMockSession, isConfigured, role } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const redirectPath = searchParams.get('redirect');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,28 +18,27 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { error, data } = await signIn(email, password);
+      const { error, role: userRole } = await signIn(email, password);
       if (error) {
-        setErrorMsg(error.message || 'Invalid email or password. Please try again.');
+        const message = error.message?.toLowerCase().includes('invalid')
+          ? 'Invalid email or password. Please verify your credentials and try again.'
+          : error.message || 'Unable to sign in. Please try again.';
+        setErrorMsg(message);
         setIsLoading(false);
         return;
       }
 
-      // Check where to navigate based on role or redirectPath
-      const target = redirectPath || (email.toLowerCase().includes('admin') ? '/admin' : '/dashboard');
-      navigate(target, { replace: true });
+      // After successful login:
+      // If profiles.role = 'admin', redirect to /admin
+      // If profiles.role = 'user', redirect to /dashboard
+      if (userRole === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'An unexpected error occurred during sign in.');
+      setErrorMsg('An unexpected error occurred during sign in. Please try again.');
       setIsLoading(false);
-    }
-  };
-
-  const handleQuickDemo = (demoRole: 'user' | 'admin') => {
-    setMockSession(demoRole);
-    if (demoRole === 'admin') {
-      navigate('/admin');
-    } else {
-      navigate('/dashboard');
     }
   };
 
@@ -68,37 +65,6 @@ const Login: React.FC = () => {
 
         {/* Card */}
         <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xl shadow-slate-100/60">
-          {!isConfigured && (
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900">
-              <div className="flex items-center space-x-2 font-bold mb-1">
-                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <span>Supabase Setup Notice</span>
-              </div>
-              <p className="text-amber-800 leading-relaxed mb-2">
-                Set <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-950 font-semibold">SUPABASE_URL</code> and <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-950 font-semibold">SUPABASE_PUBLISHABLE_KEY</code> in project settings to connect your live Supabase database.
-              </p>
-              <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between">
-                <span className="font-medium text-amber-900">Test with sample roles:</span>
-                <div className="flex space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('user')}
-                    className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-bold text-slate-800 hover:bg-slate-50 transition-colors shadow-2xs"
-                  >
-                    Client
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('admin')}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-2xs"
-                  >
-                    Admin
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {errorMsg && (
             <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-3 text-xs text-rose-800 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -190,7 +156,7 @@ const Login: React.FC = () => {
         {/* Security badge */}
         <div className="mt-8 flex items-center justify-center space-x-2 text-xs text-slate-500">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Protected by Supabase Auth with Row Level Security (RLS)</span>
+          <span>256-Bit Encrypted Secure Session</span>
         </div>
       </div>
     </div>

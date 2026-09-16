@@ -13,7 +13,7 @@ const SignUp: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signUp, isConfigured } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,18 +74,6 @@ const SignUp: React.FC = () => {
 
         {/* Card */}
         <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xl shadow-slate-100/60">
-          {!isConfigured && (
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900">
-              <div className="flex items-center space-x-2 font-bold mb-1">
-                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <span>Supabase Ready</span>
-              </div>
-              <p className="text-amber-800 leading-relaxed">
-                Connect your Supabase project using <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">SUPABASE_URL</code> and <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">SUPABASE_PUBLISHABLE_KEY</code>. You can also sign up now in simulation mode.
-              </p>
-            </div>
-          )}
-
           {successMsg ? (
             <div className="text-center py-6">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -246,7 +234,7 @@ const SignUp: React.FC = () => {
         {/* Security badge */}
         <div className="mt-8 flex items-center justify-center space-x-2 text-xs text-slate-500">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Role-Based Access Control via Supabase RLS</span>
+          <span>256-Bit Encrypted Secure Session</span>
         </div>
       </div>
     </div>

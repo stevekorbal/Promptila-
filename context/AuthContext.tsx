@@ -11,7 +11,7 @@ interface AuthContextType {
   isLoading: boolean;
   isConfigured: boolean;
   signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string }) => Promise<{ error: Error | null; data?: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null; data?: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; data?: any; role?: UserRole }>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<{ error: Error | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
@@ -33,12 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isMockAuth, setIsMockAuth] = useState<boolean>(false);
 
   // Load user profile from Supabase profiles table
-  const loadProfile = async (userId: string, userEmail?: string) => {
+  const loadProfile = async (userId: string, userEmail?: string): Promise<UserProfile> => {
     try {
       const userProfile = await fetchUserProfile(userId);
       if (userProfile) {
         setProfile(userProfile);
         setRole(userProfile.role);
+        return userProfile;
       } else {
         // Fallback default profile if table doesn't have row yet
         const defaultProfile: UserProfile = {
@@ -48,10 +49,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setProfile(defaultProfile);
         setRole('user');
+        return defaultProfile;
       }
     } catch (err) {
       console.warn('Failed to load profile from profiles table:', err);
+      const defaultProfile: UserProfile = {
+        id: userId,
+        email: userEmail,
+        role: 'user',
+      };
+      setProfile(defaultProfile);
       setRole('user');
+      return defaultProfile;
     }
   };
 
@@ -102,20 +111,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, metadata?: { first_name?: string; last_name?: string }) => {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      // If Supabase is not yet configured, provide helpful simulation
-      const mockId = 'mock-user-' + Math.random().toString(36).substring(2, 9);
-      const mockProfile: UserProfile = {
-        id: mockId,
-        email,
-        role: 'user',
-        first_name: metadata?.first_name,
-        last_name: metadata?.last_name,
-        full_name: `${metadata?.first_name || ''} ${metadata?.last_name || ''}`.trim(),
+      return { 
+        error: new Error('Unable to create account at this time. Please check your connection and try again later.') 
       };
-      setProfile(mockProfile);
-      setRole('user');
-      setIsMockAuth(true);
-      return { error: null, data: { user: { id: mockId, email } } };
     }
 
     try {
@@ -144,24 +142,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      // Mock login for preview testing when environment variables are pending
-      const mockRole: UserRole = email.toLowerCase().includes('admin') ? 'admin' : 'user';
-      setMockSession(mockRole);
-      return { error: null };
+      return { 
+        error: new Error('Unable to sign in at this time. Please check your connection and try again later.') 
+      };
     }
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
       if (error) return { error };
 
+      let userRole: UserRole = 'user';
       if (data.user) {
-        await loadProfile(data.user.id, data.user.email);
+        const userProfile = await loadProfile(data.user.id, data.user.email);
+        userRole = userProfile?.role || 'user';
       }
-      return { error: null, data };
+      return { error: null, data, role: userRole };
     } catch (err: any) {
       return { error: err };
     }
