@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Sparkles, Shield, ArrowRight } from 'lucide-react';
-import { SERVICE_PLANS } from '../data/plans.ts';
+import { useServices } from '../data/plans.ts';
 
 const PricingSection: React.FC = () => {
-  const diyPlan = SERVICE_PLANS.diy;
-  const dfyPlan = SERVICE_PLANS.dfy;
-  const monitoringPlan = SERVICE_PLANS.monitoring;
+  const { plans } = useServices();
+  const diyPlan = plans.diy;
+  const dfyPlan = plans.dfy;
+  const monitoringPlan = plans.monitoring;
 
   return (
     <section id="pricing" className="py-24 bg-slate-50 border-t border-slate-200/80 relative overflow-hidden">

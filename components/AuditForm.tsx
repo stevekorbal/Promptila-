@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuditRequest } from '../types.ts';
+import { getSupabaseClient } from '../lib/supabase.ts';
 
 const N8N_WEBHOOK_URL = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955';
 
@@ -59,6 +60,22 @@ const AuditForm: React.FC = () => {
 
       if (response && response.ok) {
         setIsSubmitted(true);
+
+        // Also record into Supabase audit_requests table
+        try {
+          const supabase = getSupabaseClient();
+          if (supabase) {
+            await supabase.from('audit_requests').insert({
+              business_name: formData.business_name,
+              website: formData.website,
+              email: formData.email,
+              status: 'pending',
+            });
+          }
+        } catch (dbErr) {
+          console.warn('Could not record audit request in Supabase:', dbErr);
+        }
+
         setFormData({
           full_name: '',
           business_name: '',

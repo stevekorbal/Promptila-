@@ -1,4 +1,6 @@
-import { ServicePlan, ServicePlanId } from '../types.ts';
+import { useState, useEffect } from 'react';
+import { ServicePlan, ServicePlanId, ServiceRecord } from '../types.ts';
+import { getSupabaseClient, fetchServicesFromSupabase } from '../lib/supabase.ts';
 
 export const SERVICE_PLANS: Record<ServicePlanId, ServicePlan> = {
   diy: {
@@ -63,9 +65,82 @@ export const SERVICE_PLANS: Record<ServicePlanId, ServicePlan> = {
 
 export const DEFAULT_PLAN_ID: ServicePlanId = 'dfy';
 
-export function getServicePlan(id: string | null | undefined): ServicePlan {
+export function getServicePlan(id: string | null | undefined, customPlans?: Record<ServicePlanId, ServicePlan>): ServicePlan {
+  const plans = customPlans || SERVICE_PLANS;
   if (id && (id === 'diy' || id === 'dfy' || id === 'monitoring')) {
-    return SERVICE_PLANS[id];
+    return plans[id] || SERVICE_PLANS[id];
   }
-  return SERVICE_PLANS[DEFAULT_PLAN_ID];
+  return plans[DEFAULT_PLAN_ID] || SERVICE_PLANS[DEFAULT_PLAN_ID];
 }
+
+/**
+ * Hook to load dynamic services from Supabase `services` table
+ * and merge with the UI plans format
+ */
+export function useServices() {
+  const [plans, setPlans] = useState<Record<ServicePlanId, ServicePlan>>(SERVICE_PLANS);
+  const [rawServices, setRawServices] = useState<ServiceRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      try {
+        const dbServices = await fetchServicesFromSupabase();
+        if (!isMounted) return;
+
+        if (dbServices && dbServices.length > 0) {
+          setRawServices(dbServices);
+          const updatedPlans: Record<ServicePlanId, ServicePlan> = { ...SERVICE_PLANS };
+
+          dbServices.forEach((service) => {
+            const rawSlug = (service.slug || service.name || '').toLowerCase();
+            let matchedKey: ServicePlanId | null = null;
+
+            if (rawSlug.includes('diy') || rawSlug.includes('blueprint')) {
+              matchedKey = 'diy';
+            } else if (rawSlug.includes('dfy') || rawSlug.includes('optimization')) {
+              matchedKey = 'dfy';
+            } else if (rawSlug.includes('monitoring') || rawSlug.includes('month')) {
+              matchedKey = 'monitoring';
+            }
+
+            if (matchedKey) {
+              const base = SERVICE_PLANS[matchedKey];
+              const priceNum = Number(service.price) || base.price;
+              const formattedPrice = priceNum >= 1000 
+                ? `$${priceNum.toLocaleString()}` 
+                : `$${priceNum}`;
+
+              updatedPlans[matchedKey] = {
+                ...base,
+                name: service.name || base.name,
+                description: service.description || base.description,
+                price: priceNum,
+                formattedPrice,
+                billingType: service.billing_type || base.billingType,
+                billingInterval: service.billing_type === 'recurring' ? '/month' : undefined,
+              };
+            }
+          });
+
+          setPlans(updatedPlans);
+        }
+      } catch (err) {
+        console.warn('Could not load services from Supabase:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return { plans, rawServices, loading };
+}
+

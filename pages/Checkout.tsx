@@ -17,13 +17,20 @@ import {
   Calendar,
   Info
 } from 'lucide-react';
-import { SERVICE_PLANS, getServicePlan } from '../data/plans.ts';
+import { SERVICE_PLANS, getServicePlan, useServices } from '../data/plans.ts';
 import { CheckoutFormData, ServicePlanId } from '../types.ts';
+import { useAuth } from '../context/AuthContext.tsx';
+import { getSupabaseClient } from '../lib/supabase.ts';
 
 const Checkout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const { plans, loading: servicesLoading } = useServices();
+
+  // Load service name, price, description, and billing type using the URL service slug
+  // Do not accept a price from the URL
   const rawService = searchParams.get('service');
-  const selectedPlan = getServicePlan(rawService);
+  const selectedPlan = getServicePlan(rawService, plans);
 
   const [formData, setFormData] = useState<CheckoutFormData>({
     firstName: '',
@@ -74,18 +81,54 @@ const Checkout: React.FC = () => {
     setCardExp(val);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
 
-    // Simulate front-end order processing
-    setTimeout(() => {
-      const generatedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
-      setOrderId(generatedId);
-      setIsProcessing(false);
-      setIsSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 1200);
+    const generatedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        // Save business if specified
+        if (formData.businessName && formData.website) {
+          await supabase.from('businesses').insert({
+            user_id: user.id,
+            name: formData.businessName,
+            website: formData.website,
+            city: formData.city,
+            state: formData.state,
+            phone: formData.phone,
+          });
+        }
+
+        // Record order
+        await supabase.from('orders').insert({
+          user_id: user.id,
+          service_name: selectedPlan.name,
+          amount: selectedPlan.price,
+          status: 'completed',
+          billing_type: selectedPlan.billingType,
+        });
+
+        // Record subscription if recurring
+        if (selectedPlan.billingType === 'recurring') {
+          await supabase.from('subscriptions').insert({
+            user_id: user.id,
+            service_name: selectedPlan.name,
+            status: 'active',
+            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Could not persist order to Supabase:', dbErr);
+      }
+    }
+
+    setOrderId(generatedId);
+    setIsProcessing(false);
+    setIsSuccess(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Success Confirmation Screen

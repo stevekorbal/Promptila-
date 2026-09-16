@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.tsx';
+import { User, ShieldCheck } from 'lucide-react';
 
 const Header: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { user, role } = useAuth();
 
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'How It Works', path: '/how-it-works' },
     { name: 'Services', path: '/services' },
+    { name: 'Pricing', path: '/#pricing' },
     { name: 'Industries', path: '/industries' },
     { name: 'Case Studies', path: '/case-study/big-lake-candy' },
   ];
@@ -30,7 +34,7 @@ const Header: React.FC = () => {
           </div>
           
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center space-x-8">
+          <nav className="hidden lg:flex items-center space-x-7">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
@@ -52,16 +56,53 @@ const Header: React.FC = () => {
               Contact Us
             </Link>
 
+            {/* Auth links */}
+            {user ? (
+              <div className="flex items-center space-x-3 pl-2 border-l border-slate-200">
+                {role === 'admin' && (
+                  <Link
+                    to="/admin"
+                    className="inline-flex items-center text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                    <span>Admin</span>
+                  </Link>
+                )}
+                <Link
+                  to="/dashboard"
+                  className="inline-flex items-center text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+                >
+                  <User className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                  <span>Dashboard</span>
+                </Link>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors"
+              >
+                Sign In
+              </Link>
+            )}
+
             <Link
               to="/contact"
-              className="inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-all active:scale-95"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-all active:scale-95"
             >
-              Get Your Free AI Report
+              Free AI Report
             </Link>
           </nav>
 
           {/* Mobile menu button */}
-          <div className="lg:hidden flex items-center">
+          <div className="lg:hidden flex items-center space-x-2">
+            {user && (
+              <Link
+                to="/dashboard"
+                className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200"
+              >
+                Dashboard
+              </Link>
+            )}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="inline-flex items-center justify-center p-2 rounded-md text-slate-600 hover:text-indigo-600 focus:outline-none"
@@ -104,6 +145,35 @@ const Header: React.FC = () => {
             >
               Contact Us
             </Link>
+
+            {user ? (
+              <>
+                <Link
+                  to="/dashboard"
+                  onClick={() => setIsOpen(false)}
+                  className="block px-3 py-2 text-base font-bold text-indigo-600"
+                >
+                  My Dashboard
+                </Link>
+                {role === 'admin' && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setIsOpen(false)}
+                    className="block px-3 py-2 text-base font-bold text-amber-600"
+                  >
+                    Admin Panel
+                  </Link>
+                )}
+              </>
+            ) : (
+              <Link
+                to="/login"
+                onClick={() => setIsOpen(false)}
+                className="block px-3 py-2 text-base font-semibold text-slate-700 hover:text-indigo-600"
+              >
+                Sign In
+              </Link>
+            )}
 
             <Link
               to="/contact"
