@@ -20,10 +20,8 @@ const Login: React.FC = () => {
     try {
       const { error, role: userRole } = await signIn(email, password);
       if (error) {
-        const message = error.message?.toLowerCase().includes('invalid')
-          ? 'Invalid email or password. Please verify your credentials and try again.'
-          : error.message || 'Unable to sign in. Please try again.';
-        setErrorMsg(message);
+        // Display the actual Supabase error message directly to diagnose issues
+        setErrorMsg(error.message || 'Unable to sign in. Please try again.');
         setIsLoading(false);
         return;
       }
@@ -37,7 +35,7 @@ const Login: React.FC = () => {
         navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
-      setErrorMsg('An unexpected error occurred during sign in. Please try again.');
+      setErrorMsg(err?.message || 'An unexpected error occurred during sign in. Please try again.');
       setIsLoading(false);
     }
   };

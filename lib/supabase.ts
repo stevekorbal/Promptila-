@@ -1,14 +1,26 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { UserProfile, ServiceRecord, ServicePlanId } from '../types.ts';
 
+// Function to normalize Supabase project URL (strips /rest/v1 or trailing slashes if pasted by mistake)
+export function normalizeSupabaseUrl(url?: string): string {
+  if (!url) return '';
+  let clean = url.trim();
+  clean = clean.replace(/\/+$/, '');
+  clean = clean.replace(/\/rest\/v1\/?$/i, '');
+  clean = clean.replace(/\/+$/, '');
+  return clean;
+}
+
 // Extract Supabase environment variables safely
-const supabaseUrl = 
+const rawSupabaseUrl = 
   (typeof process !== 'undefined' && process.env && (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)) ||
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL)) ||
   '';
 
-const supabasePublishableKey = 
+export const supabaseUrl = normalizeSupabaseUrl(rawSupabaseUrl);
+
+export const supabasePublishableKey = 
   (typeof process !== 'undefined' && process.env && (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)) ||
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY)) ||

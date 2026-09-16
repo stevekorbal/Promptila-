@@ -16,10 +16,6 @@ interface AuthContextType {
   sendPasswordReset: (email: string) => Promise<{ error: Error | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
   refreshProfile: () => Promise<void>;
-  // For easy testing when Supabase env vars are still being configured in AI Studio
-  setMockSession: (role: UserRole) => void;
-  clearMockSession: () => void;
-  isMockAuth: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,10 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isMockAuth, setIsMockAuth] = useState<boolean>(false);
 
   // Load user profile from Supabase profiles table
-  const loadProfile = async (userId: string, userEmail?: string): Promise<UserProfile> => {
+  const loadProfile = async (userId: string, userEmail?: string): Promise<UserProfile | null> => {
     try {
       const userProfile = await fetchUserProfile(userId);
       if (userProfile) {
@@ -41,26 +36,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRole(userProfile.role);
         return userProfile;
       } else {
-        // Fallback default profile if table doesn't have row yet
-        const defaultProfile: UserProfile = {
+        const fallbackProfile: UserProfile = {
           id: userId,
           email: userEmail,
           role: 'user',
         };
-        setProfile(defaultProfile);
+        setProfile(fallbackProfile);
         setRole('user');
-        return defaultProfile;
+        return fallbackProfile;
       }
     } catch (err) {
       console.warn('Failed to load profile from profiles table:', err);
-      const defaultProfile: UserProfile = {
+      const fallbackProfile: UserProfile = {
         id: userId,
         email: userEmail,
         role: 'user',
       };
-      setProfile(defaultProfile);
+      setProfile(fallbackProfile);
       setRole('user');
-      return defaultProfile;
+      return fallbackProfile;
     }
   };
 
@@ -68,16 +62,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabaseClient();
 
     if (!supabase) {
-      // Check if there was a saved mock session in localStorage
-      const savedMock = localStorage.getItem('promptila_mock_role') as UserRole | null;
-      if (savedMock && (savedMock === 'user' || savedMock === 'admin')) {
-        setMockSession(savedMock);
-      }
       setIsLoading(false);
       return;
     }
 
-    // 1. Check active session
+    // 1. Check active session from Supabase Auth
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -90,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // 2. Listen for auth state changes
+    // 2. Listen for auth state changes from Supabase Auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
@@ -112,13 +101,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabaseClient();
     if (!supabase) {
       return { 
-        error: new Error('Unable to create account at this time. Please check your connection and try again later.') 
+        error: new Error('Unable to create account. Supabase client is not initialized.') 
       };
     }
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
@@ -143,23 +132,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabaseClient();
     if (!supabase) {
       return { 
-        error: new Error('Unable to sign in at this time. Please check your connection and try again later.') 
+        error: new Error('Unable to sign in. Supabase connection is not available.') 
       };
     }
 
     try {
+      // Authenticate against Supabase Auth (auth.users)
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-      if (error) return { error };
-
-      let userRole: UserRole = 'user';
-      if (data.user) {
-        const userProfile = await loadProfile(data.user.id, data.user.email);
-        userRole = userProfile?.role || 'user';
+      if (error) {
+        return { error };
       }
+
+      if (!data.user) {
+        return { error: new Error('No user returned after authentication.') };
+      }
+
+      // 1. Get the authenticated user's UUID
+      const userUuid = data.user.id;
+
+      // 2. Query profiles where id equals that UUID
+      const { data: profileRow, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userUuid)
+        .maybeSingle();
+
+      if (profileError) {
+        console.warn('Profile fetch note:', profileError.message);
+      }
+
+      // 3. Read the role
+      const userRole: UserRole = profileRow?.role === 'admin' ? 'admin' : 'user';
+
+      // Update state
+      setUser(data.user);
+      setSession(data.session);
+      setRole(userRole);
+
+      if (profileRow) {
+        setProfile({
+          id: profileRow.id,
+          email: profileRow.email || data.user.email,
+          role: userRole,
+          full_name: profileRow.full_name || `${profileRow.first_name || ''} ${profileRow.last_name || ''}`.trim() || undefined,
+          first_name: profileRow.first_name,
+          last_name: profileRow.last_name,
+          created_at: profileRow.created_at,
+        });
+      } else {
+        setProfile({
+          id: userUuid,
+          email: data.user.email,
+          role: userRole,
+        });
+      }
+
       return { error: null, data, role: userRole };
     } catch (err: any) {
       return { error: err };
@@ -171,7 +202,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (supabase) {
       await supabase.auth.signOut();
     }
-    clearMockSession();
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -181,10 +211,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sendPasswordReset = async (email: string) => {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      return { error: null };
+      return { error: new Error('Supabase client is not available.') };
     }
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       return { error };
@@ -196,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updatePassword = async (newPassword: string) => {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      return { error: null };
+      return { error: new Error('Supabase client is not available.') };
     }
     try {
       const { error } = await supabase.auth.updateUser({
@@ -214,33 +244,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const setMockSession = (newRole: UserRole) => {
-    const mockUser: any = {
-      id: `preview-${newRole}-id`,
-      email: newRole === 'admin' ? 'admin@promptila.com' : 'client@promptila.com',
-      created_at: new Date().toISOString(),
-    };
-    const mockProf: UserProfile = {
-      id: mockUser.id,
-      email: mockUser.email,
-      role: newRole,
-      full_name: newRole === 'admin' ? 'Promptila Executive Admin' : 'Sarah Jenkins',
-      first_name: newRole === 'admin' ? 'Admin' : 'Sarah',
-      last_name: newRole === 'admin' ? 'Lead' : 'Jenkins',
-      created_at: new Date().toISOString(),
-    };
-    setUser(mockUser);
-    setProfile(mockProf);
-    setRole(newRole);
-    setIsMockAuth(true);
-    localStorage.setItem('promptila_mock_role', newRole);
-  };
-
-  const clearMockSession = () => {
-    setIsMockAuth(false);
-    localStorage.removeItem('promptila_mock_role');
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -256,9 +259,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendPasswordReset,
         updatePassword,
         refreshProfile,
-        setMockSession,
-        clearMockSession,
-        isMockAuth,
       }}
     >
       {children}

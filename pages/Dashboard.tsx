@@ -36,7 +36,7 @@ import {
 type DashboardTab = 'businesses' | 'audits' | 'reports' | 'orders' | 'monitoring' | 'profile';
 
 const Dashboard: React.FC = () => {
-  const { user, profile, role, signOut, isConfigured, isMockAuth } = useAuth();
+  const { user, profile, role, signOut, isConfigured } = useAuth();
   const [activeTab, setActiveTab] = useState<DashboardTab>('businesses');
   const navigate = useNavigate();
 
