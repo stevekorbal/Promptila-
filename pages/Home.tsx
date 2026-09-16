@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import AuditForm from '../components/AuditForm.tsx';
+import PricingSection from '../components/PricingSection.tsx';
 
 const Home: React.FC = () => {
   return (
@@ -264,6 +265,9 @@ const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Pricing Section */}
+      <PricingSection />
 
       {/* Primary CTA Section */}
       <section id="audit" className="py-20 bg-white">

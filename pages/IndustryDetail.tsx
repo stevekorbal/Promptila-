@@ -191,7 +191,7 @@ const IndustryDetail: React.FC = () => {
                   to="/contact"
                   className="inline-flex items-center px-10 py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all active:scale-95 text-lg shadow-xl shadow-indigo-100 group"
                 >
-                  Run Free AI Visibility Audit
+                  Get Your Free AI Report
                   <ChevronRight className="ml-2 w-6 h-6 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </div>

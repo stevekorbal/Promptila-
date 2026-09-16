@@ -17,6 +17,7 @@ import Contact from './pages/Contact.tsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.tsx';
 import TermsOfService from './pages/TermsOfService.tsx';
 import CookiePolicy from './pages/CookiePolicy.tsx';
+import Checkout from './pages/Checkout.tsx';
 import NotFound from './pages/NotFound.tsx';
 
 const App: React.FC = () => {
@@ -42,6 +43,7 @@ const App: React.FC = () => {
           <Route path="/case-studies" element={<CaseStudies />} />
           <Route path="/case-study/big-lake-candy" element={<CaseStudyBigLake />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/cookie-policy" element={<CookiePolicy />} />

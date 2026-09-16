@@ -26,3 +26,31 @@ export interface ServiceData {
   solution: string;
   outcome: string;
 }
+
+export type ServicePlanId = 'diy' | 'dfy' | 'monitoring';
+
+export interface ServicePlan {
+  id: ServicePlanId;
+  name: string;
+  badge?: string;
+  isPopular?: boolean;
+  tagline: string;
+  price: number;
+  formattedPrice: string;
+  billingType: 'one-time' | 'recurring';
+  billingInterval?: string;
+  buttonText: string;
+  description: string;
+  features: string[];
+}
+
+export interface CheckoutFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  businessName: string;
+  website: string;
+  city: string;
+  state: string;
+}

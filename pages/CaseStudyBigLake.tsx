@@ -336,7 +336,7 @@ const CaseStudyBigLake: React.FC = () => {
             to="/contact"
             className="inline-block px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-xl hover:bg-indigo-700 transition-all active:scale-95 text-base"
           >
-            Get Your Free AI Visibility Audit
+            Get Your Free AI Report
           </Link>
         </div>
       </section>
