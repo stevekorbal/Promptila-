@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { AuditRequest } from '../types.ts';
 import { getSupabaseClient } from '../lib/supabase.ts';
-
-const N8N_WEBHOOK_URL = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955';
+import { useAuth } from '../context/AuthContext.tsx';
 
 const AuditForm: React.FC = () => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<AuditRequest>({
     full_name: '',
     business_name: '',
@@ -25,81 +25,129 @@ const AuditForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setIsSubmitting(true);
     setError(null);
 
-    const payload = {
-      ...formData,
-      name: formData.full_name,
-      company: formData.business_name,
-      submitted_at: new Date().toISOString()
-    };
-
     try {
-      let response: Response | null = null;
-      try {
-        // First try sending directly to the configured n8n webhook
-        response = await fetch(N8N_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-      } catch (directError) {
-        // If direct fetch is blocked by browser CORS restrictions, fall back to backend proxy route
-        console.warn('Direct webhook fetch failed (possibly CORS), routing via proxy:', directError);
-        response = await fetch('/api/audit-webhook', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error('Database service is currently unavailable. Please try again later.');
       }
 
-      if (response && response.ok) {
-        setIsSubmitted(true);
-
-        // Also record into Supabase audit_requests table
+      // Check if the visitor is logged in to get their authenticated UUID
+      let authenticatedUserId: string | null = user?.id || null;
+      if (!authenticatedUserId) {
         try {
-          const supabase = getSupabaseClient();
-          if (supabase) {
-            await supabase.from('audit_requests').insert({
-              business_name: formData.business_name,
-              website: formData.website,
-              email: formData.email,
-              status: 'pending',
-            });
-          }
-        } catch (dbErr) {
-          console.warn('Could not record audit request in Supabase:', dbErr);
-        }
-
-        setFormData({
-          full_name: '',
-          business_name: '',
-          website: '',
-          email: '',
-          industry: '',
-          location: '',
-        });
-      } else if (response) {
-        let errorMessage = 'Something went wrong. Please try again.';
-        try {
-          const errorData = await response.json();
-          if (errorData?.hint) {
-            errorMessage = errorData.hint;
-          } else if (errorData?.message) {
-            errorMessage = errorData.message;
-          }
+          const sessionRes = await supabase.auth.getSession();
+          authenticatedUserId = sessionRes?.data?.session?.user?.id || null;
         } catch (_) {}
-        setError(errorMessage);
-      } else {
-        setError('Failed to connect to the server. Please check your internet connection.');
       }
+
+      // Parse full name into first_name and last_name
+      const nameParts = (formData.full_name || '').trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+
+      // Parse location into city and state
+      let city = '';
+      let state: string | null = null;
+      if (formData.location) {
+        const locParts = formData.location.split(',').map((p) => p.trim());
+        if (locParts.length >= 2) {
+          city = locParts[0];
+          state = locParts.slice(1).join(', ') || null;
+        } else {
+          city = formData.location.trim();
+          state = null;
+        }
+      }
+
+      // Generate or assign a client UUID for the new record to reliably retrieve the created row's ID under all RLS environments
+      const newAuditRequestId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+              const r = (Math.random() * 16) | 0;
+              const v = c === 'x' ? r : (r & 0x3) | 0x8;
+              return v.toString(16);
+            });
+
+      const insertPayload = {
+        id: newAuditRequestId,
+        first_name: firstName,
+        last_name: lastName,
+        email: formData.email.trim(),
+        phone: (formData as any).phone || null,
+        business_name: formData.business_name.trim(),
+        website: formData.website.trim(),
+        category: formData.industry.trim(),
+        city: city || formData.location.trim(),
+        state: state,
+        status: 'pending',
+        user_id: authenticatedUserId,
+      };
+
+      const { error: insertError } = await supabase
+        .from('audit_requests')
+        .insert(insertPayload);
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      // Supabase insert succeeded! Now trigger the n8n webhook with the new row's ID.
+      // If n8n fails, do NOT create another audit request; the Supabase record remains intact.
+      try {
+        const webhookPayload = {
+          audit_request_id: newAuditRequestId,
+        };
+
+        // Try direct call or fallback to proxy route
+        await fetch('/api/audit-webhook', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookPayload),
+        });
+      } catch (webhookErr) {
+        console.warn('n8n webhook execution error (Supabase record preserved):', webhookErr);
+      }
+
+      // Show existing success experience and reset form state
+      setIsSubmitted(true);
+      setFormData({
+        full_name: '',
+        business_name: '',
+        website: '',
+        email: '',
+        industry: '',
+        location: '',
+      });
     } catch (err: any) {
-      setError(err?.message || 'Failed to connect to the server. Please check your internet connection.');
+      console.error('Audit request submission error:', err);
+      // Check for Supabase duplicate / unique constraint error (PostgreSQL code 23505 or duplicate constraint message)
+      const errCode = err?.code || '';
+      const errMsg = (err?.message || '').toLowerCase();
+      const isDuplicate =
+        errCode === '23505' ||
+        errMsg.includes('duplicate') ||
+        errMsg.includes('unique') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('one_free_audit_per_domain');
+
+      if (isDuplicate) {
+        setError(
+          'This website has already received its free Promptila AI Visibility Audit. Each website is eligible for one free audit.'
+        );
+      } else {
+        // Show friendly generic error and retain entered information so the visitor can retry
+        setError(
+          'Unable to submit your audit request. Please check your information and try again.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -118,7 +166,10 @@ const AuditForm: React.FC = () => {
           Check your inbox in the next few minutes. Our AI analysts are preparing your preliminary report.
         </p>
         <button
-          onClick={() => setIsSubmitted(false)}
+          onClick={() => {
+            setIsSubmitted(false);
+            setError(null);
+          }}
           className="text-indigo-600 font-semibold hover:text-indigo-700 underline transition-colors"
         >
           Send another request
@@ -137,7 +188,8 @@ const AuditForm: React.FC = () => {
             id="full_name"
             name="full_name"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="Jane Doe"
             value={formData.full_name}
             onChange={handleChange}
@@ -150,7 +202,8 @@ const AuditForm: React.FC = () => {
             id="email"
             name="email"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="jane@company.com"
             value={formData.email}
             onChange={handleChange}
@@ -163,7 +216,8 @@ const AuditForm: React.FC = () => {
             id="business_name"
             name="business_name"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="Acme Corp"
             value={formData.business_name}
             onChange={handleChange}
@@ -176,7 +230,8 @@ const AuditForm: React.FC = () => {
             id="website"
             name="website"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="biglakecandy.com"
             value={formData.website}
             onChange={handleChange}
@@ -189,7 +244,8 @@ const AuditForm: React.FC = () => {
             id="industry"
             name="industry"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="e.g. HVAC, Legal, Medical"
             value={formData.industry}
             onChange={handleChange}
@@ -202,7 +258,8 @@ const AuditForm: React.FC = () => {
             id="location"
             name="location"
             required
-            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="City, State"
             value={formData.location}
             onChange={handleChange}

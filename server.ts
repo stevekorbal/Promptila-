@@ -15,7 +15,9 @@ async function startServer() {
   // Webhook forwarder for Get Your Free AI Report form
   app.post("/api/audit-webhook", async (req, res) => {
     try {
-      const webhookUrl = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955";
+      const webhookUrl =
+        process.env.N8N_AUDIT_WEBHOOK_URL ||
+        "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955";
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -55,7 +57,7 @@ async function startServer() {
     app.use(express.static("dist"));
     
     // SPA fallback: serve index.html for any unknown routes
-    app.get("*", (req, res) => {
+    app.get("*all", (req, res) => {
       res.sendFile(new URL("./dist/index.html", import.meta.url).pathname);
     });
   }
