@@ -93,6 +93,9 @@ const StripePaymentForm = React.forwardRef<StripePaymentFormHandle, StripePaymen
           id="payment-element"
           options={{
             layout: 'tabs',
+            wallets: {
+              link: 'never',
+            },
           }}
         />
         {errorMessage && (
