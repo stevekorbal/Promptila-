@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { 
   Check, 
   ShieldCheck, 
   Lock, 
-  CreditCard, 
   Sparkles, 
   ArrowLeft, 
   Building2, 
@@ -17,28 +16,104 @@ import {
   Calendar,
   Info
 } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
   useStripe,
   useElements
 } from '@stripe/react-stripe-js';
+
 import { SERVICE_PLANS, getServicePlan, useServices } from '../data/plans.ts';
 import { CheckoutFormData, ServicePlanId } from '../types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { getSupabaseClient } from '../lib/supabase.ts';
 
+// Cached Stripe promise to avoid unnecessary re-creation across re-renders
+let cachedStripePromise: Promise<Stripe | null> | null = null;
 
+interface StripePaymentFormHandle {
+  confirmPayment: () => Promise<{ error?: any; paymentIntent?: any }>;
+}
+
+interface StripePaymentFormProps {
+  billingDetails: {
+    name: string;
+    email: string;
+    phone: string;
+    city: string;
+    state: string;
+  };
+  errorMessage: string | null;
+}
+
+const StripePaymentForm = React.forwardRef<StripePaymentFormHandle, StripePaymentFormProps>(
+  ({ billingDetails, errorMessage }, ref) => {
+    const stripe = useStripe();
+    const elements = useElements();
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        confirmPayment: async () => {
+          if (!stripe || !elements) {
+            return {
+              error: {
+                message: 'Secure payment is still initializing. Please wait a moment and try again.',
+              },
+            };
+          }
+
+          return await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+              return_url: window.location.href,
+              payment_method_data: {
+                billing_details: {
+                  name: billingDetails.name || undefined,
+                  email: billingDetails.email || undefined,
+                  phone: billingDetails.phone || undefined,
+                  address: {
+                    city: billingDetails.city || undefined,
+                    state: billingDetails.state || undefined,
+                  },
+                },
+              },
+            },
+            redirect: 'if_required',
+          });
+        },
+      }),
+      [stripe, elements, billingDetails]
+    );
+
+    return (
+      <div className="space-y-4">
+        <PaymentElement
+          id="payment-element"
+          options={{
+            layout: 'tabs',
+          }}
+        />
+        {errorMessage && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-start space-x-2">
+            <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+StripePaymentForm.displayName = 'StripePaymentForm';
 
 const Checkout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const auditId = searchParams.get('audit_id');
   const { user } = useAuth();
-  const { plans, loading: servicesLoading } = useServices();
+  const { plans } = useServices();
 
   // Load service name, price, description, and billing type using the URL service slug
-  // Do not accept a price from the URL
   const rawService = searchParams.get('service');
   const selectedPlan = getServicePlan(rawService, plans);
 
@@ -53,11 +128,16 @@ const Checkout: React.FC = () => {
     state: '',
   });
 
-  const [cardHolder, setCardHolder] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExp, setCardExp] = useState('');
-  const [cardCvc, setCardCvc] = useState('');
-  const [cardZip, setCardZip] = useState('');
+  // Stripe integration state
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(() => cachedStripePromise);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [isInitializingPayment, setIsInitializingPayment] = useState<boolean>(false);
+  const [paymentInitError, setPaymentInitError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+
+  const stripePaymentFormRef = useRef<StripePaymentFormHandle | null>(null);
+  const fetchedIntentAuditIdRef = useRef<string | null>(null);
+  const isFetchingIntentRef = useRef<boolean>(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -68,83 +148,236 @@ const Checkout: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
-const handleServiceChange = (id: ServicePlanId) => {
-  const params: Record<string, string> = { service: id };
+  // Fetch publishable key from /api/stripe-config and initialize Stripe
+  useEffect(() => {
+    if (cachedStripePromise) {
+      setStripePromise(cachedStripePromise);
+      return;
+    }
 
-  if (auditId) {
-    params.audit_id = auditId;
-  }
+    let isMounted = true;
 
-  setSearchParams(params);
-};
+    async function fetchStripeConfig() {
+      try {
+        const response = await fetch('/api/stripe-config');
+        if (!response.ok) {
+          throw new Error('Failed to load Stripe configuration');
+        }
+        const data = await response.json();
+        if (!data.publishableKey) {
+          throw new Error('Stripe publishable key is missing');
+        }
+
+        const promise = loadStripe(data.publishableKey);
+        cachedStripePromise = promise;
+
+        if (isMounted) {
+          setStripePromise(promise);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Failed to load Stripe configuration:', err);
+          setPaymentInitError('Unable to load payment configuration. Please try again later.');
+        }
+      }
+    }
+
+    fetchStripeConfig();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Create PaymentIntent for DIY plan only when auditId is available
+  useEffect(() => {
+    if (selectedPlan.id !== 'diy') {
+      return;
+    }
+
+    if (!auditId) {
+      setPaymentInitError(
+        'An audit ID (e.g. AUD-XXXXXX) is required to order the DIY AI Visibility Blueprint. Please use the link provided in your audit report.'
+      );
+      return;
+    }
+
+    // Prevent duplicate calls if already fetched for this auditId
+    if (fetchedIntentAuditIdRef.current === auditId && clientSecret) {
+      return;
+    }
+
+    if (isFetchingIntentRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    isFetchingIntentRef.current = true;
+    setIsInitializingPayment(true);
+    setPaymentInitError(null);
+
+    async function createPaymentIntent() {
+      try {
+        const response = await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            audit_id: auditId,
+          }),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || 'Failed to initialize payment');
+        }
+
+        const data = await response.json();
+        if (isMounted) {
+          if (data.clientSecret) {
+            fetchedIntentAuditIdRef.current = auditId;
+            setClientSecret(data.clientSecret);
+          } else {
+            throw new Error('No client secret returned from payment service');
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('PaymentIntent creation error:', err);
+          setPaymentInitError(err.message || 'Unable to prepare payment session. Please try again.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsInitializingPayment(false);
+        }
+        isFetchingIntentRef.current = false;
+      }
+    }
+
+    createPaymentIntent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedPlan.id, auditId, clientSecret]);
+
+  // Check if returning from a redirected Stripe payment
+  useEffect(() => {
+    const redirectStatus = searchParams.get('redirect_status');
+    const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
+
+    if (redirectStatus === 'succeeded' && paymentIntentClientSecret && stripePromise) {
+      stripePromise.then(async (stripe) => {
+        if (!stripe) return;
+        try {
+          const { paymentIntent } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
+          if (paymentIntent && paymentIntent.status === 'succeeded') {
+            const confirmedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
+            setOrderId(confirmedId);
+            setIsSuccess(true);
+          }
+        } catch (err) {
+          console.error('Error verifying redirected payment:', err);
+        }
+      });
+    }
+  }, [searchParams, stripePromise]);
+
+  const handleServiceChange = (id: ServicePlanId) => {
+    const params: Record<string, string> = { service: id };
+
+    if (auditId) {
+      params.audit_id = auditId;
+    }
+
+    setSearchParams(params);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleFormatCardNumber = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 16);
-    const formatted = val.match(/.{1,4}/g)?.join(' ') || val;
-    setCardNumber(formatted);
-  };
-
-  const handleFormatExp = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, '').slice(0, 4);
-    if (val.length >= 3) {
-      val = `${val.slice(0, 2)}/${val.slice(2)}`;
-    }
-    setCardExp(val);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessing(true);
 
-    const generatedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
+    if (isProcessing) return;
 
-    const supabase = getSupabaseClient();
-    if (supabase && user) {
-      try {
-        // Save business if specified
-        if (formData.businessName && formData.website) {
-          await supabase.from('businesses').insert({
-            user_id: user.id,
-            name: formData.businessName,
-            website: formData.website,
-            city: formData.city,
-            state: formData.state,
-            phone: formData.phone,
-          });
-        }
-
-        // Record order
-        await supabase.from('orders').insert({
-          user_id: user.id,
-          service_name: selectedPlan.name,
-          amount: selectedPlan.price,
-          status: 'completed',
-          billing_type: selectedPlan.billingType,
-        });
-
-        // Record subscription if recurring
-        if (selectedPlan.billingType === 'recurring') {
-          await supabase.from('subscriptions').insert({
-            user_id: user.id,
-            service_name: selectedPlan.name,
-            status: 'active',
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Could not persist order to Supabase:', dbErr);
-      }
+    if (selectedPlan.id !== 'diy') {
+      setSubmissionError(
+        `Instant card checkout is currently active for the DIY Blueprint ($297). Please select the DIY Blueprint to complete payment online, or contact us regarding ${selectedPlan.name}.`
+      );
+      return;
     }
 
-    setOrderId(generatedId);
-    setIsProcessing(false);
-    setIsSuccess(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!auditId) {
+      setSubmissionError(
+        'An audit ID (e.g. AUD-XXXXXX) is required to order the DIY Blueprint. Please access checkout through your audit report.'
+      );
+      return;
+    }
+
+    if (!stripePaymentFormRef.current) {
+      setSubmissionError('Payment form is not ready. Please wait a moment and try again.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setSubmissionError(null);
+
+    try {
+      const { error, paymentIntent } = await stripePaymentFormRef.current.confirmPayment();
+
+      if (error) {
+        setIsProcessing(false);
+        setSubmissionError(error.message || 'Payment could not be confirmed. Please check your payment details.');
+        return;
+      }
+
+      if (paymentIntent && paymentIntent.status === 'succeeded') {
+        const generatedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        const supabase = getSupabaseClient();
+        if (supabase && user) {
+          try {
+            // Save business if specified
+            if (formData.businessName && formData.website) {
+              await supabase.from('businesses').insert({
+                user_id: user.id,
+                name: formData.businessName,
+                website: formData.website,
+                city: formData.city,
+                state: formData.state,
+                phone: formData.phone,
+              });
+            }
+
+            // Record completed order only after payment success
+            await supabase.from('orders').insert({
+              user_id: user.id,
+              service_name: selectedPlan.name,
+              amount: selectedPlan.price,
+              status: 'completed',
+              billing_type: selectedPlan.billingType,
+            });
+          } catch (dbErr) {
+            console.warn('Could not persist order to Supabase:', dbErr);
+          }
+        }
+
+        setOrderId(generatedId);
+        setIsProcessing(false);
+        setIsSuccess(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setIsProcessing(false);
+        setSubmissionError('Payment confirmation incomplete. Please contact support if your card was charged.');
+      }
+    } catch (err: any) {
+      setIsProcessing(false);
+      setSubmissionError(err?.message || 'An unexpected error occurred while confirming payment.');
+    }
   };
 
   // Success Confirmation Screen
@@ -165,7 +398,7 @@ const handleServiceChange = (id: ServicePlanId) => {
               Thank You, {formData.firstName || 'Partner'}!
             </h1>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">
-              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received. Our AI search specialists are already preparing your kickoff dossier.
+              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. Our AI search specialists are preparing your kickoff dossier.
             </p>
 
             {/* Order Confirmation Card */}
@@ -174,6 +407,12 @@ const handleServiceChange = (id: ServicePlanId) => {
                 <span className="text-slate-500">Service Plan</span>
                 <span className="font-bold text-slate-900">{selectedPlan.name}</span>
               </div>
+              {auditId && (
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200 text-sm">
+                  <span className="text-slate-500">Audit Dossier ID</span>
+                  <span className="font-mono font-bold text-indigo-600">{auditId}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center pb-3 border-b border-slate-200 text-sm">
                 <span className="text-slate-500">Billing Type</span>
                 <span className="font-medium text-slate-900 capitalize">
@@ -235,6 +474,10 @@ const handleServiceChange = (id: ServicePlanId) => {
     );
   }
 
+  const isFormSubmittable =
+    !isProcessing &&
+    (selectedPlan.id !== 'diy' || (Boolean(stripePromise) && Boolean(clientSecret)));
+
   return (
     <div className="pt-24 pb-20 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -284,7 +527,7 @@ const handleServiceChange = (id: ServicePlanId) => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          {/* Left Column: Checkout Forms (8 cols) */}
+          {/* Left Column: Checkout Forms (7 cols) */}
           <div className="lg:col-span-7 space-y-8">
             <form onSubmit={handleSubmit} id="checkout-form">
               {/* Section 1: Business & Contact Information */}
@@ -465,7 +708,7 @@ const handleServiceChange = (id: ServicePlanId) => {
                 </div>
               </div>
 
-              {/* Section 2: Payment Information Placeholder */}
+              {/* Section 2: Payment Information with Stripe Payment Element */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
@@ -486,100 +729,74 @@ const handleServiceChange = (id: ServicePlanId) => {
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <label htmlFor="cardHolder" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Name on Card
-                    </label>
-                    <input
-                      type="text"
-                      id="cardHolder"
-                      required
-                      value={cardHolder || (formData.firstName ? `${formData.firstName} ${formData.lastName}`.trim() : '')}
-                      onChange={(e) => setCardHolder(e.target.value)}
-                      placeholder="Jane Doe"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="cardNumber" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Card Number
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <CreditCard className="w-4 h-4" />
+                  {selectedPlan.id === 'diy' ? (
+                    stripePromise && clientSecret ? (
+                      <Elements
+                        stripe={stripePromise}
+                        options={{
+                          clientSecret,
+                          appearance: {
+                            theme: 'stripe',
+                            variables: {
+                              colorPrimary: '#4f46e5',
+                              colorBackground: '#ffffff',
+                              colorText: '#0f172a',
+                              borderRadius: '12px',
+                              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            },
+                          },
+                        }}
+                      >
+                        <StripePaymentForm
+                          ref={stripePaymentFormRef}
+                          billingDetails={{
+                            name: `${formData.firstName} ${formData.lastName}`.trim(),
+                            email: formData.email,
+                            phone: formData.phone,
+                            city: formData.city,
+                            state: formData.state,
+                          }}
+                          errorMessage={submissionError}
+                        />
+                      </Elements>
+                    ) : paymentInitError ? (
+                      <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-sm">
+                        <div className="flex items-center space-x-2 font-semibold mb-1">
+                          <Info className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                          <span>Payment Setup Notice</span>
+                        </div>
+                        <p>{paymentInitError}</p>
                       </div>
-                      <input
-                        type="text"
-                        id="cardNumber"
-                        required
-                        maxLength={19}
-                        value={cardNumber}
-                        onChange={handleFormatCardNumber}
-                        placeholder="4242 •••• •••• 4242"
-                        className="w-full pl-10 pr-24 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono transition-all"
-                      />
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center space-x-1.5 pointer-events-none">
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter bg-slate-100 px-1.5 py-0.5 rounded">VISA</span>
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter bg-slate-100 px-1.5 py-0.5 rounded">MC</span>
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter bg-slate-100 px-1.5 py-0.5 rounded">AMEX</span>
+                    ) : (
+                      <div className="py-10 px-4 text-center">
+                        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                        <p className="text-sm font-medium text-slate-600">Loading secure payment form...</p>
+                        <p className="text-xs text-slate-400 mt-1">Connecting to Stripe encryption gateway</p>
                       </div>
+                    )
+                  ) : (
+                    <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                      <div className="flex items-center space-x-2 font-semibold text-slate-900 mb-2">
+                        <Info className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        <span>Online checkout for {selectedPlan.name} is in preparation</span>
+                      </div>
+                      <p className="text-slate-600 mb-3 text-xs leading-relaxed">
+                        Online Stripe credit card checkout is currently active for the DIY AI Visibility Blueprint ($297).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleServiceChange('diy')}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline"
+                      >
+                        Switch to DIY AI Visibility Blueprint ($297)
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label htmlFor="cardExp" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Expires (MM/YY)
-                      </label>
-                      <input
-                        type="text"
-                        id="cardExp"
-                        required
-                        maxLength={5}
-                        value={cardExp}
-                        onChange={handleFormatExp}
-                        placeholder="MM/YY"
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono transition-all text-center"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="cardCvc" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Security CVC
-                      </label>
-                      <input
-                        type="password"
-                        id="cardCvc"
-                        required
-                        maxLength={4}
-                        value={cardCvc}
-                        onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ''))}
-                        placeholder="123"
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono transition-all text-center"
-                      />
-                    </div>
-
-                    <div className="col-span-2 sm:col-span-1">
-                      <label htmlFor="cardZip" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Billing ZIP
-                      </label>
-                      <input
-                        type="text"
-                        id="cardZip"
-                        required
-                        value={cardZip}
-                        onChange={(e) => setCardZip(e.target.value)}
-                        placeholder="90210"
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-center"
-                      />
-                    </div>
-                  </div>
+                  )}
 
                   <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-start space-x-3 text-xs text-slate-600">
-                    <Info className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                     <span>
-                      Frontend evaluation environment. Test your transaction securely; live card charges are simulated during this stage.
+                      Transactions are secured with 256-bit bank-grade encryption via Stripe. Card details are never stored on our servers.
                     </span>
                   </div>
                 </div>
@@ -588,7 +805,7 @@ const handleServiceChange = (id: ServicePlanId) => {
                 <div className="mt-8 pt-6 border-t border-slate-100 lg:hidden">
                   <button
                     type="submit"
-                    disabled={isProcessing}
+                    disabled={!isFormSubmittable}
                     className="w-full py-4 px-6 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all active:scale-[0.99] shadow-lg shadow-indigo-600/20 disabled:opacity-70 flex items-center justify-center space-x-2"
                   >
                     {isProcessing ? (
@@ -633,6 +850,14 @@ const handleServiceChange = (id: ServicePlanId) => {
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
                   {selectedPlan.description}
                 </p>
+
+                {/* Audit ID badge if attached */}
+                {auditId && (
+                  <div className="mb-3 px-3 py-2 bg-indigo-50/70 border border-indigo-100 rounded-lg flex items-center justify-between text-xs">
+                    <span className="text-indigo-700 font-medium">Audit Reference:</span>
+                    <span className="font-mono font-bold text-indigo-900">{auditId}</span>
+                  </div>
+                )}
 
                 {/* Plan Highlights */}
                 <ul className="space-y-2 pt-3 border-t border-slate-200/60">
@@ -695,7 +920,7 @@ const handleServiceChange = (id: ServicePlanId) => {
               <button
                 type="submit"
                 form="checkout-form"
-                disabled={isProcessing}
+                disabled={!isFormSubmittable}
                 className="w-full hidden lg:flex items-center justify-center py-4 px-6 rounded-xl font-bold text-base text-white bg-indigo-600 hover:bg-indigo-700 transition-all active:scale-[0.99] shadow-xl shadow-indigo-600/20 disabled:opacity-70 group"
               >
                 {isProcessing ? (
