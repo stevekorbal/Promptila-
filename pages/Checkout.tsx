@@ -17,13 +17,23 @@ import {
   Calendar,
   Info
 } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements
+} from '@stripe/react-stripe-js';
 import { SERVICE_PLANS, getServicePlan, useServices } from '../data/plans.ts';
 import { CheckoutFormData, ServicePlanId } from '../types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { getSupabaseClient } from '../lib/supabase.ts';
 
+
+
 const Checkout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const auditId = searchParams.get('audit_id');
   const { user } = useAuth();
   const { plans, loading: servicesLoading } = useServices();
 
@@ -58,9 +68,15 @@ const Checkout: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const handleServiceChange = (id: ServicePlanId) => {
-    setSearchParams({ service: id });
-  };
+const handleServiceChange = (id: ServicePlanId) => {
+  const params: Record<string, string> = { service: id };
+
+  if (auditId) {
+    params.audit_id = auditId;
+  }
+
+  setSearchParams(params);
+};
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
