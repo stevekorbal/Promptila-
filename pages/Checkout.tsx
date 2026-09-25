@@ -139,19 +139,34 @@ const Checkout: React.FC = () => {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const stripePaymentFormRef = useRef<StripePaymentFormHandle | null>(null);
-  const fetchedIntentAuditIdRef = useRef<string | null>(null);
   const isFetchingIntentRef = useRef<boolean>(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderId, setOrderId] = useState('');
 
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  };
+
+  const isDetailsComplete = Boolean(
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    formData.email.trim() &&
+    isValidEmail(formData.email) &&
+    formData.phone.trim() &&
+    formData.businessName.trim() &&
+    formData.website.trim() &&
+    formData.city.trim() &&
+    formData.state.trim()
+  );
+
   // Scroll to top on load
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Fetch publishable key from /api/stripe-config and initialize Stripe
+  // Fetch publishable key from /api/stripe-config and initialize Stripe on page load
   useEffect(() => {
     if (cachedStripePromise) {
       setStripePromise(cachedStripePromise);
@@ -192,9 +207,13 @@ const Checkout: React.FC = () => {
     };
   }, []);
 
-  // Create PaymentIntent for DIY plan only when auditId is available
+  // Create PaymentIntent for DIY plan only ONCE per checkout session after details are complete
   useEffect(() => {
     if (selectedPlan.id !== 'diy') {
+      return;
+    }
+
+    if (clientSecret) {
       return;
     }
 
@@ -205,8 +224,8 @@ const Checkout: React.FC = () => {
       return;
     }
 
-    // Prevent duplicate calls if already fetched for this auditId
-    if (fetchedIntentAuditIdRef.current === auditId && clientSecret) {
+    // Do not initialize until all required customer and business details are completed
+    if (!isDetailsComplete) {
       return;
     }
 
@@ -215,20 +234,34 @@ const Checkout: React.FC = () => {
     }
 
     let isMounted = true;
-    isFetchingIntentRef.current = true;
-    setIsInitializingPayment(true);
-    setPaymentInitError(null);
 
-    async function createPaymentIntent() {
+    // Debounce by 500ms to prevent creating PaymentIntents while typing
+    const debounceTimer = setTimeout(async () => {
+      if (clientSecret || isFetchingIntentRef.current) {
+        return;
+      }
+
+      isFetchingIntentRef.current = true;
+      setIsInitializingPayment(true);
+      setPaymentInitError(null);
+
+      const currentPayload = {
+        audit_id: auditId,
+        email: formData.email.trim(),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        businessName: formData.businessName.trim(),
+        website: formData.website.trim(),
+        phone: formData.phone.trim(),
+      };
+
       try {
         const response = await fetch('/api/create-payment-intent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            audit_id: auditId,
-          }),
+          body: JSON.stringify(currentPayload),
         });
 
         if (!response.ok) {
@@ -239,7 +272,6 @@ const Checkout: React.FC = () => {
         const data = await response.json();
         if (isMounted) {
           if (data.clientSecret) {
-            fetchedIntentAuditIdRef.current = auditId;
             setClientSecret(data.clientSecret);
           } else {
             throw new Error('No client secret returned from payment service');
@@ -256,14 +288,24 @@ const Checkout: React.FC = () => {
         }
         isFetchingIntentRef.current = false;
       }
-    }
-
-    createPaymentIntent();
+    }, 500);
 
     return () => {
       isMounted = false;
+      clearTimeout(debounceTimer);
     };
-  }, [selectedPlan.id, auditId, clientSecret]);
+  }, [
+    selectedPlan.id,
+    auditId,
+    isDetailsComplete,
+    formData.email,
+    formData.firstName,
+    formData.lastName,
+    formData.businessName,
+    formData.website,
+    formData.phone,
+    clientSecret,
+  ]);
 
   // Check if returning from a redirected Stripe payment
   useEffect(() => {
@@ -321,7 +363,12 @@ const Checkout: React.FC = () => {
       return;
     }
 
-    if (!stripePaymentFormRef.current) {
+    if (!isDetailsComplete) {
+      setSubmissionError('Please complete all required customer and business details before proceeding to payment.');
+      return;
+    }
+
+    if (!clientSecret || !stripePaymentFormRef.current) {
       setSubmissionError('Payment form is not ready. Please wait a moment and try again.');
       return;
     }
@@ -479,6 +526,8 @@ const Checkout: React.FC = () => {
 
   const isFormSubmittable =
     !isProcessing &&
+    !isInitializingPayment &&
+    isDetailsComplete &&
     (selectedPlan.id !== 'diy' || (Boolean(stripePromise) && Boolean(clientSecret)));
 
   return (
@@ -770,11 +819,19 @@ const Checkout: React.FC = () => {
                         </div>
                         <p>{paymentInitError}</p>
                       </div>
-                    ) : (
+                    ) : isInitializingPayment ? (
                       <div className="py-10 px-4 text-center">
                         <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                         <p className="text-sm font-medium text-slate-600">Loading secure payment form...</p>
                         <p className="text-xs text-slate-400 mt-1">Connecting to Stripe encryption gateway</p>
+                      </div>
+                    ) : (
+                      <div className="py-8 px-4 text-center bg-slate-50 rounded-xl border border-slate-200/80">
+                        <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-700">Enter Contact & Business Details</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Complete the required customer and business information above to load the secure payment form.
+                        </p>
                       </div>
                     )
                   ) : (
@@ -793,6 +850,13 @@ const Checkout: React.FC = () => {
                       >
                         Switch to DIY AI Visibility Blueprint ($297)
                       </button>
+                    </div>
+                  )}
+
+                  {!clientSecret && submissionError && (
+                    <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-start space-x-2">
+                      <Info className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                      <span>{submissionError}</span>
                     </div>
                   )}
 

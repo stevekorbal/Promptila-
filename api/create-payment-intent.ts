@@ -28,18 +28,31 @@ export default async function handler(
       });
     }
 
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        error: 'Missing or invalid customer email',
+      });
+    }
+
+    const customerName =
+      `${firstName || ''} ${lastName || ''}`.trim();
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: 29700,
       currency: 'usd',
 
-      receipt_email: email || undefined,
+      // Stripe receipt
+      receipt_email: email,
 
       metadata: {
         audit_id,
         service: 'diy',
+
+        customer_email: email,
+        customer_name: customerName,
+
         business_name: businessName || '',
         website: website || '',
-        customer_name: `${firstName || ''} ${lastName || ''}`.trim(),
         phone: phone || '',
       },
 
