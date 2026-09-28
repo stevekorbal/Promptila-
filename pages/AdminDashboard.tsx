@@ -78,7 +78,7 @@ const AdminDashboard: React.FC = () => {
       ]);
       setServices([
         { id: 'srv-1', slug: 'diy', name: 'DIY Blueprint', description: 'Self-paced AI search optimization framework', price: 297, billing_type: 'one-time' },
-        { id: 'srv-2', slug: 'dfy', name: 'DFY Optimization', description: 'Complete turnkey implementation by Promptila team', price: 1199, billing_type: 'one-time' },
+        { id: 'srv-2', slug: 'dfy', name: 'DFY Optimization', description: 'Complete turnkey implementation by Promptila team', price: 999, billing_type: 'one-time' },
         { id: 'srv-3', slug: 'monitoring', name: 'Monthly Monitoring', description: '24/7 brand surveillance & displacement defense', price: 99, billing_type: 'recurring' },
       ]);
       setLoading(false);
