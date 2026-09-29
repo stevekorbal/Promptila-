@@ -116,9 +116,9 @@ const Checkout: React.FC = () => {
   const { user } = useAuth();
   const { plans } = useServices();
 
-  // Load service name, price, description, and billing type using the URL service slug
-  const rawService = searchParams.get('service');
-  const selectedPlan = getServicePlan(rawService, plans);
+  // Load service name, price, description, and billing type using the URL product/service parameter
+  const rawProduct = searchParams.get('product') || searchParams.get('service');
+  const selectedPlan = getServicePlan(rawProduct, plans);
 
   const [formData, setFormData] = useState<CheckoutFormData>({
     firstName: '',
@@ -330,13 +330,16 @@ const Checkout: React.FC = () => {
   }, [searchParams, stripePromise]);
 
   const handleServiceChange = (id: ServicePlanId) => {
-    const params: Record<string, string> = { service: id };
+    const nextParams = new URLSearchParams(searchParams);
+    const productParam = id === 'diy' ? 'blueprint' : id;
+    nextParams.set('product', productParam);
+    nextParams.set('service', id);
 
     if (auditId) {
-      params.audit_id = auditId;
+      nextParams.set('audit_id', auditId);
     }
 
-    setSearchParams(params);
+    setSearchParams(nextParams);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

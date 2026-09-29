@@ -65,12 +65,25 @@ export const SERVICE_PLANS: Record<ServicePlanId, ServicePlan> = {
 
 export const DEFAULT_PLAN_ID: ServicePlanId = 'dfy';
 
+export function normalizeServicePlanId(id: string | null | undefined): ServicePlanId {
+  if (!id) return DEFAULT_PLAN_ID;
+  const key = id.toLowerCase().trim();
+  if (key === 'blueprint' || key === 'diy') {
+    return 'diy';
+  }
+  if (key === 'dfy' || key === 'optimization') {
+    return 'dfy';
+  }
+  if (key === 'monitoring' || key === 'monthly') {
+    return 'monitoring';
+  }
+  return DEFAULT_PLAN_ID;
+}
+
 export function getServicePlan(id: string | null | undefined, customPlans?: Record<ServicePlanId, ServicePlan>): ServicePlan {
   const plans = customPlans || SERVICE_PLANS;
-  if (id && (id === 'diy' || id === 'dfy' || id === 'monitoring')) {
-    return plans[id] || SERVICE_PLANS[id];
-  }
-  return plans[DEFAULT_PLAN_ID] || SERVICE_PLANS[DEFAULT_PLAN_ID];
+  const planId = normalizeServicePlanId(id);
+  return plans[planId] || SERVICE_PLANS[planId];
 }
 
 /**
