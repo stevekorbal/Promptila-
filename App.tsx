@@ -27,10 +27,14 @@ import ForgotPassword from './pages/ForgotPassword.tsx';
 import ResetPassword from './pages/ResetPassword.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import AdminDashboard from './pages/AdminDashboard.tsx';
+import AdminLayout from './pages/admin/AdminLayout.tsx';
+import AdminOverview from './pages/admin/AdminOverview.tsx';
+import AdminPlaceholder from './pages/admin/AdminPlaceholder.tsx';
 import NotFound from './pages/NotFound.tsx';
 
 const App: React.FC = () => {
   const { pathname } = useLocation();
+  const isAdminRoute = pathname.startsWith('/admin');
 
   // Scroll to top on route change
   useEffect(() => {
@@ -40,7 +44,7 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <div className="min-h-screen flex flex-col">
-        <Header />
+        {!isAdminRoute && <Header />}
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -66,14 +70,24 @@ const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
+            {/* Dedicated Admin Shell & Nested Routes */}
             <Route
               path="/admin"
               element={
                 <AdminRoute>
-                  <AdminDashboard />
+                  <AdminLayout />
                 </AdminRoute>
               }
-            />
+            >
+              <Route index element={<AdminOverview />} />
+              <Route path="audits" element={<AdminPlaceholder sectionTitle="Audits" />} />
+              <Route path="customers" element={<AdminPlaceholder sectionTitle="Customers" />} />
+              <Route path="blueprint-orders" element={<AdminPlaceholder sectionTitle="Blueprint Orders" />} />
+              <Route path="dfy-orders" element={<AdminPlaceholder sectionTitle="DFY Orders" />} />
+              <Route path="emails" element={<AdminPlaceholder sectionTitle="Email Activity" />} />
+              <Route path="alerts" element={<AdminPlaceholder sectionTitle="Alerts" />} />
+              <Route path="settings" element={<AdminPlaceholder sectionTitle="Settings" />} />
+            </Route>
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/cookie-policy" element={<CookiePolicy />} />
@@ -81,8 +95,8 @@ const App: React.FC = () => {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
-        <Footer />
-        <CookieConsent />
+        {!isAdminRoute && <Footer />}
+        {!isAdminRoute && <CookieConsent />}
       </div>
     </AuthProvider>
   );
