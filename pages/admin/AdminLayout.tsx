@@ -35,19 +35,19 @@ export const AdminLayout: React.FC = () => {
       return { title: 'Audits', subtitle: 'AI Visibility audit requests, scores, and generated reports' };
     }
     if (path.startsWith('/admin/customers')) {
-      return { title: 'Customers', subtitle: 'Verified business accounts and domain portfolios' };
+      return { title: 'Customers', subtitle: 'Leads, customers, businesses, and purchase activity' };
     }
     if (path.startsWith('/admin/blueprint-orders')) {
       return { title: 'Blueprint Orders', subtitle: 'Self-paced $297 Blueprint sales and automated delivery' };
     }
     if (path.startsWith('/admin/dfy-orders')) {
-      return { title: 'DFY Orders', subtitle: 'Turnkey $999 Done-For-You optimization pipeline' };
+      return { title: 'DFY Orders', subtitle: '$999 Done-For-You Optimization sales and fulfillment' };
     }
     if (path.startsWith('/admin/emails')) {
-      return { title: 'Email Activity', subtitle: 'Automated notification sequences and webhook logs' };
+      return { title: 'Email Activity', subtitle: 'Automated email sequences and dispatch logs' };
     }
     if (path.startsWith('/admin/alerts')) {
-      return { title: 'System Alerts', subtitle: 'Issues requiring staff resolution and workflow status' };
+      return { title: 'System Alerts', subtitle: 'Operational issues requiring attention' };
     }
     if (path.startsWith('/admin/settings')) {
       return { title: 'Settings', subtitle: 'System configurations, webhooks, and administrative team' };

@@ -29,6 +29,13 @@ import Dashboard from './pages/Dashboard.tsx';
 import AdminDashboard from './pages/AdminDashboard.tsx';
 import AdminLayout from './pages/admin/AdminLayout.tsx';
 import AdminOverview from './pages/admin/AdminOverview.tsx';
+import AdminAudits from './pages/admin/AdminAudits.tsx';
+import AdminAuditDetail from './pages/admin/AdminAuditDetail.tsx';
+import AdminCustomers from './pages/admin/AdminCustomers.tsx';
+import AdminBlueprintOrders from './pages/admin/AdminBlueprintOrders.tsx';
+import AdminDfyOrders from './pages/admin/AdminDfyOrders.tsx';
+import AdminEmails from './pages/admin/AdminEmails.tsx';
+import AdminAlerts from './pages/admin/AdminAlerts.tsx';
 import AdminPlaceholder from './pages/admin/AdminPlaceholder.tsx';
 import NotFound from './pages/NotFound.tsx';
 
@@ -80,12 +87,13 @@ const App: React.FC = () => {
               }
             >
               <Route index element={<AdminOverview />} />
-              <Route path="audits" element={<AdminPlaceholder sectionTitle="Audits" />} />
-              <Route path="customers" element={<AdminPlaceholder sectionTitle="Customers" />} />
-              <Route path="blueprint-orders" element={<AdminPlaceholder sectionTitle="Blueprint Orders" />} />
-              <Route path="dfy-orders" element={<AdminPlaceholder sectionTitle="DFY Orders" />} />
-              <Route path="emails" element={<AdminPlaceholder sectionTitle="Email Activity" />} />
-              <Route path="alerts" element={<AdminPlaceholder sectionTitle="Alerts" />} />
+              <Route path="audits" element={<AdminAudits />} />
+              <Route path="audits/:auditId" element={<AdminAuditDetail />} />
+              <Route path="customers" element={<AdminCustomers />} />
+              <Route path="blueprint-orders" element={<AdminBlueprintOrders />} />
+              <Route path="dfy-orders" element={<AdminDfyOrders />} />
+              <Route path="emails" element={<AdminEmails />} />
+              <Route path="alerts" element={<AdminAlerts />} />
               <Route path="settings" element={<AdminPlaceholder sectionTitle="Settings" />} />
             </Route>
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />

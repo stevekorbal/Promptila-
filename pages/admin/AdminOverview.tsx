@@ -918,7 +918,11 @@ export const AdminOverview: React.FC = () => {
                   if (a.actionLabel === 'View Order') {
                     navigate('/admin/blueprint-orders');
                   } else if (a.actionLabel === 'View Audit') {
-                    navigate('/admin/audits');
+                    if (a.auditId) {
+                      navigate(`/admin/audits/${a.auditId}`);
+                    } else {
+                      navigate('/admin/audits');
+                    }
                   }
                 }}
               />
@@ -1056,12 +1060,11 @@ export const AdminOverview: React.FC = () => {
                 key: 'action',
                 header: 'Action',
                 align: 'right',
-                render: () => (
+                render: (item) => (
                   <button
                     type="button"
-                    disabled
-                    title="Audit detail route pending implementation"
-                    className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-400 cursor-not-allowed"
+                    onClick={() => navigate(`/admin/audits/${item.audit_id || item.id}`)}
+                    className="px-2 py-1 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 hover:text-indigo-600 transition-colors"
                   >
                     View Dossier
                   </button>
