@@ -36,6 +36,7 @@ import AdminBlueprintOrders from './pages/admin/AdminBlueprintOrders.tsx';
 import AdminDfyOrders from './pages/admin/AdminDfyOrders.tsx';
 import AdminEmails from './pages/admin/AdminEmails.tsx';
 import AdminAlerts from './pages/admin/AdminAlerts.tsx';
+import AdminSettings from './pages/admin/AdminSettings.tsx';
 import AdminPlaceholder from './pages/admin/AdminPlaceholder.tsx';
 import NotFound from './pages/NotFound.tsx';
 
@@ -94,7 +95,7 @@ const App: React.FC = () => {
               <Route path="dfy-orders" element={<AdminDfyOrders />} />
               <Route path="emails" element={<AdminEmails />} />
               <Route path="alerts" element={<AdminAlerts />} />
-              <Route path="settings" element={<AdminPlaceholder sectionTitle="Settings" />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
