@@ -9,6 +9,7 @@ export interface AuditRequest {
   email: string;
   industry: string;
   location: string;
+  priority_service_raw?: string | null;
 }
 
 export interface IndustryData {

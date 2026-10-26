@@ -11,6 +11,7 @@ const AuditForm: React.FC = () => {
     website: '',
     email: '',
     industry: '',
+    priority_service_raw: '',
     location: '',
   });
 
@@ -74,6 +75,10 @@ const AuditForm: React.FC = () => {
               return v.toString(16);
             });
 
+      const priorityServiceRaw = formData.priority_service_raw && formData.priority_service_raw.trim() !== ''
+        ? formData.priority_service_raw
+        : null;
+
       const insertPayload = {
         id: newAuditRequestId,
         first_name: firstName,
@@ -83,6 +88,7 @@ const AuditForm: React.FC = () => {
         business_name: formData.business_name.trim(),
         website: formData.website.trim(),
         category: formData.industry.trim(),
+        priority_service_raw: priorityServiceRaw,
         city: city || formData.location.trim(),
         state: state,
         status: 'pending',
@@ -102,6 +108,7 @@ const AuditForm: React.FC = () => {
       try {
         const webhookPayload = {
           audit_request_id: newAuditRequestId,
+          priority_service_raw: priorityServiceRaw,
         };
 
         // Try direct call or fallback to proxy route
@@ -124,6 +131,7 @@ const AuditForm: React.FC = () => {
         website: '',
         email: '',
         industry: '',
+        priority_service_raw: '',
         location: '',
       });
     } catch (err: any) {
@@ -248,6 +256,21 @@ const AuditForm: React.FC = () => {
             className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
             placeholder="e.g. HVAC, Legal, Medical"
             value={formData.industry}
+            onChange={handleChange}
+          />
+        </div>
+        <div>
+          <label htmlFor="priority_service_raw" className="block text-sm font-medium text-slate-700 mb-1">
+            Which service would you most like to get more customers for?
+          </label>
+          <input
+            type="text"
+            id="priority_service_raw"
+            name="priority_service_raw"
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
+            placeholder="e.g. AC replacement, teeth whitening, roof repair"
+            value={formData.priority_service_raw || ''}
             onChange={handleChange}
           />
         </div>

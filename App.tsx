@@ -38,11 +38,22 @@ import AdminEmails from './pages/admin/AdminEmails.tsx';
 import AdminAlerts from './pages/admin/AdminAlerts.tsx';
 import AdminSettings from './pages/admin/AdminSettings.tsx';
 import AdminPlaceholder from './pages/admin/AdminPlaceholder.tsx';
+import CustomerLayout from './pages/customer/CustomerLayout.tsx';
+import CustomerOverview from './pages/customer/CustomerOverview.tsx';
+import CustomerAudit from './pages/customer/CustomerAudit.tsx';
+import CustomerBlueprint from './pages/customer/CustomerBlueprint.tsx';
+import CustomerRecommendations from './pages/customer/CustomerRecommendations.tsx';
+import CustomerProgress from './pages/customer/CustomerProgress.tsx';
+import CustomerDfy from './pages/customer/CustomerDfy.tsx';
+import CustomerMonitoring from './pages/customer/CustomerMonitoring.tsx';
+import CustomerAccount from './pages/customer/CustomerAccount.tsx';
 import NotFound from './pages/NotFound.tsx';
 
 const App: React.FC = () => {
   const { pathname } = useLocation();
   const isAdminRoute = pathname.startsWith('/admin');
+  const isDashboardRoute = pathname.startsWith('/dashboard');
+  const isDedicatedConsole = isAdminRoute || isDashboardRoute;
 
   // Scroll to top on route change
   useEffect(() => {
@@ -52,7 +63,7 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <div className="min-h-screen flex flex-col">
-        {!isAdminRoute && <Header />}
+        {!isDedicatedConsole && <Header />}
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -70,14 +81,24 @@ const App: React.FC = () => {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            {/* Dedicated Customer Dashboard Shell & Nested Routes */}
             <Route
               path="/dashboard"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <CustomerLayout />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<CustomerOverview />} />
+              <Route path="audit" element={<CustomerAudit />} />
+              <Route path="blueprint" element={<CustomerBlueprint />} />
+              <Route path="recommendations" element={<CustomerRecommendations />} />
+              <Route path="progress" element={<CustomerProgress />} />
+              <Route path="dfy" element={<CustomerDfy />} />
+              <Route path="monitoring" element={<CustomerMonitoring />} />
+              <Route path="account" element={<CustomerAccount />} />
+            </Route>
             {/* Dedicated Admin Shell & Nested Routes */}
             <Route
               path="/admin"
@@ -104,8 +125,8 @@ const App: React.FC = () => {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
-        {!isAdminRoute && <Footer />}
-        {!isAdminRoute && <CookieConsent />}
+        {!isDedicatedConsole && <Footer />}
+        {!isDedicatedConsole && <CookieConsent />}
       </div>
     </AuthProvider>
   );
