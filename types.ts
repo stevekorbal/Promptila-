@@ -8,7 +8,9 @@ export interface AuditRequest {
   website: string;
   email: string;
   industry: string;
-  location: string;
+  city: string;
+  state: string;
+  location?: string;
   priority_service_raw?: string | null;
 }
 

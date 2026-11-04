@@ -10,42 +10,8 @@ export default async function handler(
     });
   }
 
-  try {
-    const OLD_WEBHOOK = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955';
-    const CURRENT_WEBHOOK = 'https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/abb33bb6-8245-4321-86ad-0bad9232860e';
-    let webhookUrl = process.env.N8N_AUDIT_WEBHOOK_URL || CURRENT_WEBHOOK;
-    if (!webhookUrl || webhookUrl === OLD_WEBHOOK || webhookUrl.includes('9ba196f8-c567-4e4a-b424-4ede63310955')) {
-      webhookUrl = CURRENT_WEBHOOK;
-    }
-
-    const webhookResponse = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(req.body),
-    });
-
-    const responseText = await webhookResponse.text();
-
-    let responseData;
-
-    try {
-      responseData = JSON.parse(responseText);
-    } catch {
-      responseData = {
-        message: responseText
-      };
-    }
-
-    return res.status(webhookResponse.status).json(responseData);
-
-  } catch (error: any) {
-    console.error('Webhook forwarding error:', error);
-
-    return res.status(502).json({
-      error: 'Failed to connect to webhook destination',
-      message: error?.message || String(error),
-    });
-  }
+  return res.status(200).json({
+    ok: true,
+    message: 'Audits start automatically from the database.',
+  });
 }

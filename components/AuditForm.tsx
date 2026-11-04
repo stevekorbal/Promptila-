@@ -3,6 +3,60 @@ import { AuditRequest } from '../types.ts';
 import { getSupabaseClient } from '../lib/supabase.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'DC', name: 'District of Columbia' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+];
+
 const AuditForm: React.FC = () => {
   const { user } = useAuth();
   const [formData, setFormData] = useState<AuditRequest>({
@@ -12,7 +66,8 @@ const AuditForm: React.FC = () => {
     email: '',
     industry: '',
     priority_service_raw: '',
-    location: '',
+    city: '',
+    state: '',
   });
 
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -51,19 +106,8 @@ const AuditForm: React.FC = () => {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
 
-      // Parse location into city and state
-      let city = '';
-      let state: string | null = null;
-      if (formData.location) {
-        const locParts = formData.location.split(',').map((p) => p.trim());
-        if (locParts.length >= 2) {
-          city = locParts[0];
-          state = locParts.slice(1).join(', ') || null;
-        } else {
-          city = formData.location.trim();
-          state = null;
-        }
-      }
+      const trimmedCity = (formData.city || '').trim();
+      const stateCode = (formData.state || '').trim();
 
       // Generate or assign a client UUID for the new record to reliably retrieve the created row's ID under all RLS environments
       const newAuditRequestId =
@@ -89,8 +133,8 @@ const AuditForm: React.FC = () => {
         website: formData.website.trim(),
         category: formData.industry.trim(),
         priority_service_raw: priorityServiceRaw,
-        city: city || formData.location.trim(),
-        state: state,
+        city: trimmedCity,
+        state: stateCode || null,
         status: 'pending',
         user_id: authenticatedUserId,
       };
@@ -103,27 +147,8 @@ const AuditForm: React.FC = () => {
         throw insertError;
       }
 
-      // Supabase insert succeeded! Now trigger the n8n webhook with the new row's ID.
-      // If n8n fails, do NOT create another audit request; the Supabase record remains intact.
-      try {
-        const webhookPayload = {
-          audit_request_id: newAuditRequestId,
-          priority_service_raw: priorityServiceRaw,
-        };
-
-        // Try direct call or fallback to proxy route
-        await fetch('/api/audit-webhook', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookPayload),
-        });
-      } catch (webhookErr) {
-        console.warn('n8n webhook execution error (Supabase record preserved):', webhookErr);
-      }
-
-      // Show existing success experience and reset form state
+      // Supabase insert succeeded! Audits start automatically from the database.
+      // Go straight to the success experience and reset form state
       setIsSubmitted(true);
       setFormData({
         full_name: '',
@@ -132,7 +157,8 @@ const AuditForm: React.FC = () => {
         email: '',
         industry: '',
         priority_service_raw: '',
-        location: '',
+        city: '',
+        state: '',
       });
     } catch (err: any) {
       console.error('Audit request submission error:', err);
@@ -171,7 +197,7 @@ const AuditForm: React.FC = () => {
         </div>
         <h3 className="text-2xl font-bold text-slate-900 mb-4">Your free audit is on its way!</h3>
         <p className="text-slate-600 mb-8 max-w-md mx-auto">
-          Check your inbox in the next few minutes. Our AI analysts are preparing your preliminary report.
+          Check your inbox in the next 10 minutes for your free AI Visibility Report. If you don't see it, check your spam folder.
         </p>
         <button
           onClick={() => {
@@ -275,18 +301,37 @@ const AuditForm: React.FC = () => {
           />
         </div>
         <div>
-          <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-1">Primary Location</label>
+          <label htmlFor="city" className="block text-sm font-medium text-slate-700 mb-1">City</label>
           <input
             type="text"
-            id="location"
-            name="location"
+            id="city"
+            name="city"
             required
             disabled={isSubmitting}
             className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300 disabled:opacity-75 disabled:bg-slate-50"
-            placeholder="City, State"
-            value={formData.location}
+            placeholder="e.g. Lansing"
+            value={formData.city}
             onChange={handleChange}
           />
+        </div>
+        <div>
+          <label htmlFor="state" className="block text-sm font-medium text-slate-700 mb-1">State</label>
+          <select
+            id="state"
+            name="state"
+            required
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-75 disabled:bg-slate-50 text-slate-700 bg-white"
+            value={formData.state}
+            onChange={handleChange}
+          >
+            <option value="">Select state</option>
+            {US_STATES.map((st) => (
+              <option key={st.code} value={st.code}>
+                {st.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

@@ -12,40 +12,12 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // Webhook forwarder for Get Your Free AI Report form
+  // Audit webhook route (audits start automatically inside Supabase database)
   app.post("/api/audit-webhook", async (req, res) => {
-    try {
-      const OLD_WEBHOOK = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/9ba196f8-c567-4e4a-b424-4ede63310955";
-      const CURRENT_WEBHOOK = "https://n8n-r7ed.srv1965679.hstgr.cloud/webhook/abb33bb6-8245-4321-86ad-0bad9232860e";
-      let webhookUrl = process.env.N8N_AUDIT_WEBHOOK_URL || CURRENT_WEBHOOK;
-      if (!webhookUrl || webhookUrl === OLD_WEBHOOK || webhookUrl.includes("9ba196f8-c567-4e4a-b424-4ede63310955")) {
-        webhookUrl = CURRENT_WEBHOOK;
-      }
-      const webhookResponse = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(req.body),
-      });
-
-      const responseText = await webhookResponse.text();
-      let responseData: any;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { message: responseText };
-      }
-
-      res.status(webhookResponse.status).json(responseData);
-    } catch (err: any) {
-      console.error("Webhook forwarding error:", err);
-      res.status(502).json({
-        code: 502,
-        error: "Failed to connect to the webhook destination",
-        message: err?.message || String(err),
-      });
-    }
+    res.status(200).json({
+      ok: true,
+      message: "Audits start automatically from the database.",
+    });
   });
 
   // Vite middleware for development
