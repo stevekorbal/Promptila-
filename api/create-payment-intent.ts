@@ -80,6 +80,11 @@ export default async function handler(
   const { data: authData, error: authError } = await supabase.auth.getUser(token);
   if (authError || !authData.user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
   const authenticatedUserId = authData.user.id;
+  // Use the caller's JWT for RLS-protected audit ownership queries.
+  const userSupabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -99,7 +104,7 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid audit ID.' });
     }
     if (metadata.audit_id) {
-      const { data: ownedAudit, error: auditError } = await supabase
+      const { data: ownedAudit, error: auditError } = await userSupabase
         .from('audits')
         .select('id')
         .eq('audit_id', metadata.audit_id)
