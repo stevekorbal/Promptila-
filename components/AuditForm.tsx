@@ -82,6 +82,14 @@ const AuditForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    if (!formData.city.trim()) {
+      setError('Please enter your city before requesting an audit.');
+      return;
+    }
+    if (!formData.state.trim()) {
+      setError('Please select your state before requesting an audit.');
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
