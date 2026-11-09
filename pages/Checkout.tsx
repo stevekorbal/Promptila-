@@ -460,6 +460,7 @@ const Checkout: React.FC = () => {
               .from('audits')
               .select('audit_id, business_name, website, location')
               .eq('audit_id', auditId)
+              .eq('user_id', user.id)
               .maybeSingle();
 
             if (auditData && (auditData.business_name || auditData.website)) {
