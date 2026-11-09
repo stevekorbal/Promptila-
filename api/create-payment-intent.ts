@@ -92,6 +92,22 @@ export default async function handler(
     const stripe = getStripeInstance();
     const body = req.body || {};
     const metadata = extractStripeMetadata(body);
+    // A supplied audit must be owned by the authenticated payer. This is checked
+    // server-side on both PaymentIntent creation and metadata updates.
+    const suppliedAuditId = body.audit_id ?? body.auditId;
+    if (suppliedAuditId && !metadata.audit_id) {
+      return res.status(400).json({ error: 'Invalid audit ID.' });
+    }
+    if (metadata.audit_id) {
+      const { data: ownedAudit, error: auditError } = await supabase
+        .from('audits')
+        .select('id')
+        .eq('audit_id', metadata.audit_id)
+        .eq('user_id', authenticatedUserId)
+        .maybeSingle();
+      if (auditError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
+      if (!ownedAudit) return res.status(403).json({ error: 'This audit does not belong to your account.' });
+    }
     const customerEmail = metadata.customer_email;
     const securedMetadata = { ...metadata, user_id: authenticatedUserId };
 
