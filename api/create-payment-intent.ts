@@ -104,6 +104,12 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid audit ID.' });
     }
     if (metadata.audit_id) {
+      // Guest free audits have no user_id. A verified-email account can safely
+      // claim its matching audit and request before the ownership check.
+      const { error: claimError } = await userSupabase.rpc('claim_own_audit_for_checkout', {
+        p_audit_id: metadata.audit_id,
+      });
+      if (claimError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
       const { data: ownedAudit, error: auditError } = await userSupabase
         .from('audits')
         .select('id')
