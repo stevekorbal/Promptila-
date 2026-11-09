@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Mail, ArrowLeft, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 
 const ForgotPassword: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const rawReturnTo = searchParams.get('return_to');
+  // Safe relative return destination only (prevents open redirects)
+  const returnTo = rawReturnTo && rawReturnTo.startsWith('/') ? rawReturnTo : '/login';
+  const isCheckoutReturn = returnTo.startsWith('/checkout');
+
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -36,11 +42,11 @@ const ForgotPassword: React.FC = () => {
       <div className="max-w-md w-full">
         <div className="mb-6">
           <Link
-            to="/login"
+            to={returnTo}
             className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors group"
           >
             <ArrowLeft className="w-3.5 h-3.5 mr-1 group-hover:-translate-x-0.5 transition-transform" />
-            Back to Sign In
+            {isCheckoutReturn ? 'Back to Checkout' : 'Back to Sign In'}
           </Link>
         </div>
 
@@ -64,10 +70,10 @@ const ForgotPassword: React.FC = () => {
                 If an account exists for <strong className="text-slate-900">{email}</strong>, a secure password reset link has been dispatched.
               </p>
               <Link
-                to="/login"
+                to={returnTo}
                 className="w-full inline-flex items-center justify-center py-3 px-6 rounded-xl font-bold text-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-all"
               >
-                Return to Sign In
+                {isCheckoutReturn ? 'Return to Checkout' : 'Return to Sign In'}
               </Link>
             </div>
           ) : (

@@ -14,7 +14,8 @@ import {
   MapPin, 
   CheckCircle2,
   Calendar,
-  Info
+  Info,
+  AlertCircle
 } from 'lucide-react';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import {
@@ -162,7 +163,7 @@ const Checkout: React.FC = () => {
     }
   }, [searchParams]);
 
-  const { user } = useAuth();
+  const { user, profile, signIn, signOut, signUp } = useAuth();
   const { plans } = useServices();
 
   // Load service name, price, description, and billing type using the URL product/service parameter
@@ -179,6 +180,470 @@ const Checkout: React.FC = () => {
     city: '',
     state: '',
   });
+
+  // Guest auth mode: 'guest' (default) | 'login' | 'register'
+  const [guestAuthMode, setGuestAuthMode] = useState<'guest' | 'login' | 'register'>('guest');
+
+  // Inline login state
+  const [inlineEmail, setInlineEmail] = useState<string>('');
+  const [inlinePassword, setInlinePassword] = useState<string>('');
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Inline account creation state
+  const [registerPassword, setRegisterPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [isRegistering, setIsRegistering] = useState<boolean>(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registerNotice, setRegisterNotice] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+
+  // Auto-population tracking & notice state
+  const [hasAutoPopulatedNotice, setHasAutoPopulatedNotice] = useState<boolean>(false);
+  const userEditedFieldsRef = useRef<Set<keyof CheckoutFormData>>(new Set());
+  const autoPopulatedFieldsRef = useRef<Set<keyof CheckoutFormData>>(new Set());
+  const previousUserIdRef = useRef<string | null>(null);
+  const populatedUserIdRef = useRef<string | null>(null);
+  const isPopulatingRef = useRef<boolean>(false);
+
+  const handleInlineLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inlineEmail.trim()) {
+      setLoginError('Please enter your email address.');
+      return;
+    }
+    if (!inlinePassword) {
+      setLoginError('Please enter your password.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setLoginError(null);
+
+    try {
+      const { error } = await signIn(inlineEmail.trim(), inlinePassword);
+      if (error) {
+        setLoginError(error.message || 'Unable to sign in. Please verify your credentials.');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Success: close inline login form and reset mode
+      setGuestAuthMode('guest');
+      setInlinePassword('');
+      setLoginError(null);
+      setIsLoggingIn(false);
+      // AuthContext updates session & user state, which triggers Stage 1 auto-population seamlessly.
+    } catch (err: any) {
+      setLoginError(err?.message || 'An unexpected error occurred during sign in. Please try again.');
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.warn('Sign-out warning on switch account:', err);
+    }
+    // AuthContext signOut() triggers user -> null
+    // Stage 1 cleanup clears previously auto-populated fields (while preserving userEditedFieldsRef)
+    setGuestAuthMode('login');
+    setInlineEmail('');
+    setInlinePassword('');
+    setLoginError(null);
+    setRegisterNotice(null);
+  };
+
+  const handleInlineSignUp = async () => {
+    // 1. Validate required customer information
+    if (!formData.firstName.trim()) {
+      setRegisterError('Please enter your First Name above.');
+      return;
+    }
+    if (!formData.lastName.trim()) {
+      setRegisterError('Please enter your Last Name above.');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setRegisterError('Please enter your Work Email above.');
+      return;
+    }
+    if (!isValidEmail(formData.email)) {
+      setRegisterError('Please enter a valid email address.');
+      return;
+    }
+    if (!formData.phone.trim()) {
+      setRegisterError('Please enter your Phone Number above.');
+      return;
+    }
+
+    // 2. Validate passwords
+    if (!registerPassword) {
+      setRegisterError('Please create a password for your account.');
+      return;
+    }
+    if (registerPassword.length < 6) {
+      setRegisterError('Password must be at least 6 characters.');
+      return;
+    }
+    if (registerPassword !== confirmPassword) {
+      setRegisterError('Passwords do not match. Please verify your password confirmation.');
+      return;
+    }
+
+    setIsRegistering(true);
+    setRegisterError(null);
+    setRegisterNotice(null);
+
+    try {
+      // 3. Call existing AuthContext signUp functionality with metadata
+      const { error, data } = await signUp(formData.email.trim(), registerPassword, {
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
+      });
+
+      if (error) {
+        const errorMsgLower = (error.message || '').toLowerCase();
+        const isExistingAccount =
+          errorMsgLower.includes('already registered') ||
+          errorMsgLower.includes('already exists') ||
+          errorMsgLower.includes('user_already_exists');
+
+        if (isExistingAccount) {
+          setRegisterError('An account with this email may already exist. Please sign in or reset your password.');
+        } else {
+          setRegisterError(error.message || 'Could not create account. Please try again.');
+        }
+        setIsRegistering(false);
+        return;
+      }
+
+      // Check if user already exists when identities array is empty (Supabase security feature)
+      if (data?.user?.identities && data.user.identities.length === 0) {
+        setRegisterError('An account with this email may already exist. Please sign in or reset your password.');
+        setIsRegistering(false);
+        return;
+      }
+
+      // Clear sensitive password inputs from memory
+      setRegisterPassword('');
+      setConfirmPassword('');
+      setIsRegistering(false);
+
+      // Check if authenticated session was returned or email confirmation is required
+      if (data?.session && data?.user) {
+        // Authenticated session established!
+        // Authorized update of phone if provided and not yet on profile
+        if (formData.phone.trim()) {
+          const supabase = getSupabaseClient();
+          if (supabase) {
+            try {
+              await supabase
+                .from('profiles')
+                .update({ phone: formData.phone.trim() })
+                .eq('id', data.user.id);
+            } catch (phoneErr) {
+              console.warn('Note: Profile phone update non-blocking notice:', phoneErr);
+            }
+          }
+        }
+
+        // Close registration interface and display success message
+        setGuestAuthMode('guest');
+        setRegisterNotice({
+          type: 'success',
+          message: 'Your Promptila account has been created. You can now complete your purchase.',
+        });
+      } else {
+        // New user returned but no session (email confirmation required by Supabase settings)
+        // Keep customer in checkout, keep fields intact, allow guest checkout to proceed
+        setGuestAuthMode('guest');
+        setRegisterNotice({
+          type: 'info',
+          message: 'Your account was created. Check your email if confirmation is required. You can continue checkout as a guest.',
+        });
+      }
+    } catch (err: any) {
+      setRegisterError(err?.message || 'An unexpected error occurred during account registration.');
+      setIsRegistering(false);
+    }
+  };
+
+  // Auto-populate customer and business information for authenticated customers
+  useEffect(() => {
+    const currentUserId = user?.id || null;
+
+    // 1. Handle sign-out or account switch:
+    // If the customer signs out or switches accounts while checkout is open,
+    // do not display the previous customer's private saved information.
+    if (previousUserIdRef.current && previousUserIdRef.current !== currentUserId) {
+      setFormData((prev) => {
+        const next = { ...prev };
+        autoPopulatedFieldsRef.current.forEach((fieldKey) => {
+          // Clear field if it was auto-populated and not subsequently edited by the customer
+          if (!userEditedFieldsRef.current.has(fieldKey)) {
+            next[fieldKey] = '';
+          }
+        });
+        return next;
+      });
+      autoPopulatedFieldsRef.current.clear();
+      setHasAutoPopulatedNotice(false);
+      populatedUserIdRef.current = null;
+    }
+
+    previousUserIdRef.current = currentUserId;
+
+    // Guest visitor: do not auto-populate
+    if (!currentUserId || !user) {
+      return;
+    }
+
+    // Prevent repeated database requests when auth state or profile refreshes for the same user
+    if (populatedUserIdRef.current === currentUserId || isPopulatingRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    isPopulatingRef.current = true;
+
+    async function autoPopulate() {
+      const supabase = getSupabaseClient();
+      if (!supabase || !user) {
+        isPopulatingRef.current = false;
+        return;
+      }
+
+      try {
+        // A. Resolve profile from public.profiles
+        let resolvedProfile = profile;
+        if (!resolvedProfile || resolvedProfile.id !== user.id) {
+          const { data: pData, error: pError } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email, phone')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (!pError && pData) {
+            resolvedProfile = {
+              id: pData.id,
+              first_name: pData.first_name,
+              last_name: pData.last_name,
+              email: pData.email,
+              phone: pData.phone,
+              role: 'user',
+            };
+          }
+        }
+
+        // B. Query saved businesses for authenticated user: user_id = user.id
+        const { data: savedBusinesses, error: bizError } = await supabase
+          .from('businesses')
+          .select('id, user_id, business_name, name, website, city, state')
+          .eq('user_id', user.id);
+
+        if (bizError) {
+          console.warn('Note: Could not retrieve customer businesses:', bizError.message);
+        }
+
+        // C. Check if checkout contains or is associated with the current audit
+        let auditSpecificBusiness: {
+          business_name?: string;
+          website?: string;
+          city?: string;
+          state?: string;
+        } | null = null;
+
+        if (auditId) {
+          try {
+            const { data: auditData } = await supabase
+              .from('audits')
+              .select('audit_id, business_name, website, location')
+              .eq('audit_id', auditId)
+              .maybeSingle();
+
+            if (auditData && (auditData.business_name || auditData.website)) {
+              let parsedCity = '';
+              let parsedState = '';
+              if (auditData.location) {
+                const parts = auditData.location.split(',');
+                if (parts.length > 1) {
+                  parsedCity = parts[0].trim();
+                  parsedState = parts[1].trim();
+                } else {
+                  parsedCity = parts[0].trim();
+                }
+              }
+              auditSpecificBusiness = {
+                business_name: auditData.business_name || undefined,
+                website: auditData.website || undefined,
+                city: parsedCity || undefined,
+                state: parsedState || undefined,
+              };
+            }
+          } catch (auditErr) {
+            console.warn('Note: Error checking audit data for checkout:', auditErr);
+          }
+        }
+
+        // D. Determine target business using Promptila Audit rules:
+        // Rule 1: If checkout already contains business information associated with the current audit, preserve it.
+        // Rule 2: Never overwrite an existing audit-related business value with an unrelated saved business.
+        // Rule 3: If the customer has exactly one saved business and no audit-specific business information, use that business for empty fields.
+        // Rule 4: If the customer has multiple businesses and no audit-specific business information, do not automatically choose one. Leave unchanged.
+        // Rule 5: If the customer has no saved business, leave empty business fields blank.
+        const hasAuditBusiness = Boolean(
+          auditSpecificBusiness && (auditSpecificBusiness.business_name || auditSpecificBusiness.website)
+        );
+
+        let targetBusiness: {
+          business_name?: string;
+          website?: string;
+          city?: string;
+          state?: string;
+        } | null = null;
+
+        if (hasAuditBusiness) {
+          targetBusiness = auditSpecificBusiness;
+        } else if (savedBusinesses && savedBusinesses.length === 1) {
+          const singleBiz = savedBusinesses[0];
+          targetBusiness = {
+            business_name: singleBiz.business_name || (singleBiz as any).name || undefined,
+            website: singleBiz.website || undefined,
+            city: singleBiz.city || undefined,
+            state: singleBiz.state || undefined,
+          };
+        } else if (savedBusinesses && savedBusinesses.length > 1) {
+          // Multiple businesses: do not auto-choose one
+          targetBusiness = null;
+        } else {
+          // No saved business
+          targetBusiness = null;
+        }
+
+        if (!isMounted) return;
+
+        // E. Populate only empty, untouched fields
+        let populatedCount = 0;
+
+        setFormData((prev) => {
+          const next = { ...prev };
+
+          // Customer Profile fields:
+          // firstName ← profiles.first_name
+          if (
+            resolvedProfile?.first_name &&
+            !userEditedFieldsRef.current.has('firstName') &&
+            !next.firstName.trim()
+          ) {
+            next.firstName = resolvedProfile.first_name;
+            autoPopulatedFieldsRef.current.add('firstName');
+            populatedCount++;
+          }
+
+          // lastName ← profiles.last_name
+          if (
+            resolvedProfile?.last_name &&
+            !userEditedFieldsRef.current.has('lastName') &&
+            !next.lastName.trim()
+          ) {
+            next.lastName = resolvedProfile.last_name;
+            autoPopulatedFieldsRef.current.add('lastName');
+            populatedCount++;
+          }
+
+          // email ← profiles.email, falling back to user.email
+          const userEmail = (resolvedProfile?.email || user.email || '').trim();
+          if (
+            userEmail &&
+            !userEditedFieldsRef.current.has('email') &&
+            !next.email.trim()
+          ) {
+            next.email = userEmail;
+            autoPopulatedFieldsRef.current.add('email');
+            populatedCount++;
+          }
+
+          // phone ← profiles.phone
+          if (
+            resolvedProfile?.phone &&
+            !userEditedFieldsRef.current.has('phone') &&
+            !next.phone.trim()
+          ) {
+            next.phone = resolvedProfile.phone;
+            autoPopulatedFieldsRef.current.add('phone');
+            populatedCount++;
+          }
+
+          // Business fields (only when targetBusiness is resolved):
+          if (targetBusiness) {
+            // businessName ← businesses.business_name
+            if (
+              targetBusiness.business_name &&
+              !userEditedFieldsRef.current.has('businessName') &&
+              !next.businessName.trim()
+            ) {
+              next.businessName = targetBusiness.business_name;
+              autoPopulatedFieldsRef.current.add('businessName');
+              populatedCount++;
+            }
+
+            // website ← businesses.website
+            if (
+              targetBusiness.website &&
+              !userEditedFieldsRef.current.has('website') &&
+              !next.website.trim()
+            ) {
+              next.website = targetBusiness.website;
+              autoPopulatedFieldsRef.current.add('website');
+              populatedCount++;
+            }
+
+            // city ← businesses.city
+            if (
+              targetBusiness.city &&
+              !userEditedFieldsRef.current.has('city') &&
+              !next.city.trim()
+            ) {
+              next.city = targetBusiness.city;
+              autoPopulatedFieldsRef.current.add('city');
+              populatedCount++;
+            }
+
+            // state ← businesses.state
+            if (
+              targetBusiness.state &&
+              !userEditedFieldsRef.current.has('state') &&
+              !next.state.trim()
+            ) {
+              next.state = targetBusiness.state;
+              autoPopulatedFieldsRef.current.add('state');
+              populatedCount++;
+            }
+          }
+
+          return next;
+        });
+
+        // Display notice only if at least one field was actually populated from the account
+        if (populatedCount > 0) {
+          setHasAutoPopulatedNotice(true);
+        }
+
+        populatedUserIdRef.current = currentUserId;
+      } catch (err) {
+        console.warn('Note: Non-blocking error during checkout auto-population:', err);
+      } finally {
+        isPopulatingRef.current = false;
+      }
+    }
+
+    autoPopulate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, profile, auditId]);
 
   // Stripe integration state
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(() => cachedStripePromise);
@@ -390,6 +855,7 @@ const Checkout: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    userEditedFieldsRef.current.add(name as keyof CheckoutFormData);
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -655,6 +1121,222 @@ const Checkout: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Section 1 Auth Header: Signed-in Status OR Guest / Sign In / Create Account Selector */}
+                {user ? (
+                  <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-slate-700">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                      <span>
+                        Signed in as: <strong className="text-slate-900">{user.email || profile?.email}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSwitchAccount}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline transition-colors cursor-pointer"
+                    >
+                      Switch account
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mb-6 pb-4 border-b border-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center space-x-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestAuthMode('guest');
+                            setLoginError(null);
+                            setRegisterError(null);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                            guestAuthMode === 'guest'
+                              ? 'bg-white text-slate-900 shadow-sm font-bold'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Continue as Guest
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestAuthMode('login');
+                            setInlineEmail(formData.email || '');
+                            setInlinePassword('');
+                            setLoginError(null);
+                            setRegisterError(null);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                            guestAuthMode === 'login'
+                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                          }`}
+                        >
+                          Sign In
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestAuthMode('register');
+                            setRegisterPassword('');
+                            setConfirmPassword('');
+                            setRegisterError(null);
+                            setLoginError(null);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                            guestAuthMode === 'register'
+                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                          }`}
+                        >
+                          Create Account
+                        </button>
+                      </div>
+
+                      {guestAuthMode === 'guest' && (
+                        <span className="text-xs text-slate-400 hidden sm:inline">
+                          Default • No password required
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Registration Notification Banner */}
+                {registerNotice && (
+                  <div
+                    className={`mb-6 p-3.5 rounded-xl border flex items-start space-x-2.5 text-xs sm:text-sm font-medium animate-in fade-in ${
+                      registerNotice.type === 'success'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-blue-50 border-blue-200 text-blue-900'
+                    }`}
+                  >
+                    {registerNotice.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <span>{registerNotice.message}</span>
+                  </div>
+                )}
+
+                {/* Inline Login Box (when Sign In option is selected) */}
+                {!user && guestAuthMode === 'login' && (
+                  <div className="mb-6 p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
+                      <div className="flex items-center space-x-2">
+                        <Lock className="w-4 h-4 text-indigo-600" />
+                        <span className="text-xs sm:text-sm font-bold text-slate-900">Sign in to your Promptila account</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGuestAuthMode('guest');
+                          setLoginError(null);
+                        }}
+                        className="text-xs text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    {loginError && (
+                      <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-2 text-xs text-rose-800">
+                        <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                        <span>{loginError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                          Email Address
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <Mail className="w-3.5 h-3.5" />
+                          </div>
+                          <input
+                            type="email"
+                            value={inlineEmail}
+                            onChange={(e) => setInlineEmail(e.target.value)}
+                            placeholder="name@company.com"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Password
+                          </label>
+                          <Link
+                            to={`/forgot-password?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+                          >
+                            Forgot password?
+                          </Link>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <Lock className="w-3.5 h-3.5" />
+                          </div>
+                          <input
+                            type="password"
+                            value={inlinePassword}
+                            onChange={(e) => setInlinePassword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleInlineLogin();
+                              }
+                            }}
+                            placeholder="••••••••"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-1 flex items-center space-x-3">
+                        <button
+                          type="button"
+                          disabled={isLoggingIn}
+                          onClick={() => handleInlineLogin()}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-60 flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          {isLoggingIn ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                              <span>Signing In...</span>
+                            </>
+                          ) : (
+                            <span>Sign In</span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestAuthMode('guest');
+                            setLoginError(null);
+                          }}
+                          className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {hasAutoPopulatedNotice && (
+                  <div className="mb-6 p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center space-x-2.5 text-xs sm:text-sm text-indigo-900 font-medium">
+                    <Sparkles className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                    <span>Your saved account details have been filled in. Please review them before payment.</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
                     <label htmlFor="firstName" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -739,6 +1421,130 @@ const Checkout: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Create Account Password Fields (shown when Create Account mode is active) */}
+                  {!user && guestAuthMode === 'register' && (
+                    <div className="sm:col-span-2 p-5 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-3 border-b border-indigo-100">
+                        <div className="flex items-center space-x-2">
+                          <Lock className="w-4 h-4 text-indigo-600" />
+                          <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                            Set Account Password
+                          </h3>
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-500">
+                          Reuses the name, email & phone above
+                        </span>
+                      </div>
+
+                      {registerError && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-2 text-xs text-rose-800">
+                          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <span>{registerError}</span>
+                            {registerError.toLowerCase().includes('already exist') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGuestAuthMode('login');
+                                  setInlineEmail(formData.email || '');
+                                  setInlinePassword('');
+                                  setLoginError(null);
+                                  setRegisterError(null);
+                                }}
+                                className="block mt-1 font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                              >
+                                Click here to Sign In instead
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label
+                            htmlFor="registerPassword"
+                            className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1"
+                          >
+                            Create Password <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                              <Lock className="w-3.5 h-3.5" />
+                            </div>
+                            <input
+                              type="password"
+                              id="registerPassword"
+                              value={registerPassword}
+                              onChange={(e) => setRegisterPassword(e.target.value)}
+                              placeholder="Minimum 6 characters"
+                              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label
+                            htmlFor="confirmPassword"
+                            className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1"
+                          >
+                            Confirm Password <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                              <Lock className="w-3.5 h-3.5" />
+                            </div>
+                            <input
+                              type="password"
+                              id="confirmPassword"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleInlineSignUp();
+                                }
+                              }}
+                              placeholder="Re-type password"
+                              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          disabled={isRegistering}
+                          onClick={handleInlineSignUp}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-60 flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          {isRegistering ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                              <span>Creating Account...</span>
+                            </>
+                          ) : (
+                            <span>Create Account</span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestAuthMode('guest');
+                            setRegisterError(null);
+                            setRegisterPassword('');
+                            setConfirmPassword('');
+                          }}
+                          className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="sm:col-span-2">
                     <label htmlFor="businessName" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">

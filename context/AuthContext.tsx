@@ -120,6 +120,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) return { error };
 
       if (data.user) {
+        if (data.session) {
+          setUser(data.user);
+          setSession(data.session);
+        }
         await loadProfile(data.user.id, data.user.email);
       }
       return { error: null, data };
@@ -181,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           full_name: profileRow.full_name || `${profileRow.first_name || ''} ${profileRow.last_name || ''}`.trim() || undefined,
           first_name: profileRow.first_name,
           last_name: profileRow.last_name,
+          phone: profileRow.phone,
           created_at: profileRow.created_at,
         });
       } else {

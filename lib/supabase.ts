@@ -86,6 +86,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       full_name: data.full_name || `${data.first_name || ''} ${data.last_name || ''}`.trim() || undefined,
       first_name: data.first_name,
       last_name: data.last_name,
+      phone: data.phone,
       created_at: data.created_at,
     };
   } catch (err) {

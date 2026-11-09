@@ -67,17 +67,21 @@ export interface UserProfile {
   full_name?: string;
   first_name?: string;
   last_name?: string;
+  phone?: string;
   created_at?: string;
 }
 
 export interface BusinessRecord {
   id: string;
   user_id?: string;
-  name: string;
+  name?: string;
+  business_name?: string;
   website?: string;
   city?: string;
   state?: string;
   phone?: string;
+  category?: string;
+  country?: string;
   created_at?: string;
 }
 
