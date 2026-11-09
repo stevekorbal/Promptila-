@@ -16,6 +16,7 @@ import Mission from './pages/Mission.tsx';
 import CaseStudies from './pages/CaseStudies.tsx';
 import CaseStudyBigLake from './pages/CaseStudyBigLake.tsx';
 import IndustryDetail from './pages/IndustryDetail.tsx';
+import Pricing from './pages/Pricing.tsx';
 import Contact from './pages/Contact.tsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.tsx';
 import TermsOfService from './pages/TermsOfService.tsx';
@@ -50,15 +51,39 @@ import CustomerAccount from './pages/customer/CustomerAccount.tsx';
 import NotFound from './pages/NotFound.tsx';
 
 const App: React.FC = () => {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname, hash } = location;
   const isAdminRoute = pathname.startsWith('/admin');
   const isDashboardRoute = pathname.startsWith('/dashboard');
   const isDedicatedConsole = isAdminRoute || isDashboardRoute;
 
-  // Scroll to top on route change
+  // Handle scroll on route or hash change
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    if (hash) {
+      const elementId = hash.replace('#', '');
+      const scrollWithOffset = () => {
+        const el = document.getElementById(elementId);
+        if (el) {
+          const headerOffset = 80;
+          const elementPosition = el.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+          return true;
+        }
+        return false;
+      };
+
+      if (!scrollWithOffset()) {
+        const timer = setTimeout(scrollWithOffset, 100);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname, hash]);
 
   return (
     <AuthProvider>
@@ -69,6 +94,7 @@ const App: React.FC = () => {
             <Route path="/" element={<Home />} />
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/services" element={<Services />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/industries" element={<Industries />} />
             <Route path="/industries/:slug" element={<IndustryDetail />} />
             <Route path="/about" element={<About />} />

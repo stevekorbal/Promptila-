@@ -12,12 +12,46 @@ const Header: React.FC = () => {
     { name: 'Home', path: '/' },
     { name: 'How It Works', path: '/how-it-works' },
     { name: 'Services', path: '/services' },
-    { name: 'Pricing', path: '/#pricing' },
+    { name: 'Pricing', path: '/pricing' },
     { name: 'Industries', path: '/industries' },
-    { name: 'Case Studies', path: '/case-study/big-lake-candy' },
+    { name: 'Case Studies', path: '/case-studies' },
   ];
 
-  const isActive = (path: string) => location.pathname === path;
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+    if (path === '/pricing' || path === '/#pricing') {
+      if (location.pathname === '/') {
+        e.preventDefault();
+        const el = document.getElementById('pricing');
+        if (el) {
+          const headerOffset = 80;
+          const elementPosition = el.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+          window.history.pushState(null, '', '/#pricing');
+        }
+      }
+    }
+    setIsOpen(false);
+  };
+
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return location.pathname === '/' && !location.hash;
+    }
+    if (path === '/pricing' || path === '/#pricing') {
+      return location.pathname === '/pricing' || (location.pathname === '/' && location.hash === '#pricing');
+    }
+    if (path === '/case-studies') {
+      return location.pathname.startsWith('/case-stud');
+    }
+    if (path === '/industries') {
+      return location.pathname.startsWith('/industries');
+    }
+    return location.pathname === path;
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md border-b border-slate-200 z-50">
@@ -39,8 +73,9 @@ const Header: React.FC = () => {
               <Link
                 key={link.path}
                 to={link.path}
+                onClick={(e) => handleNavClick(e, link.path)}
                 className={`text-sm font-medium transition-colors ${
-                  isActive(link.path) ? 'text-indigo-600' : 'text-slate-600 hover:text-indigo-600'
+                  isActive(link.path) ? 'text-indigo-600 font-semibold' : 'text-slate-600 hover:text-indigo-600'
                 }`}
               >
                 {link.name}
@@ -127,9 +162,9 @@ const Header: React.FC = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => handleNavClick(e, link.path)}
                 className={`block px-3 py-2 text-base font-medium ${
-                  isActive(link.path) ? 'text-indigo-600 bg-slate-50' : 'text-slate-600 hover:text-indigo-600'
+                  isActive(link.path) ? 'text-indigo-600 bg-slate-50 font-semibold' : 'text-slate-600 hover:text-indigo-600'
                 }`}
               >
                 {link.name}
