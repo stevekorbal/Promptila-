@@ -6,7 +6,7 @@ export interface BlueprintOrderItem {
   audit_id: string | null;
   stripe_payment_intent_id: string | null;
   amount_paid: number; // in cents
-  amount_formatted: string; // e.g. "$297.00"
+  amount_formatted: string; // e.g. "$299.00"
   currency: string;
   status: string | null;
   payment_status: string | null;
@@ -42,7 +42,7 @@ export interface BlueprintOrdersMetrics {
 
 /**
  * Format Blueprint minor currency units (cents) into standard USD currency string.
- * Example: 29700 -> $297.00
+ * Example: 29900 -> $299.00
  */
 export function formatBlueprintAmount(amountPaidCents: number, currency: string = 'usd'): string {
   const dollars = (amountPaidCents || 0) / 100;
@@ -96,7 +96,7 @@ export function formatOrderCalendarDate(dateString?: string | null): string {
  * fallback enrichment from public.audits where business/contact details are missing.
  *
  * Accounting Rules:
- * - amount_paid is ALWAYS minor currency units (cents). 29700 = $297.00.
+ * - amount_paid is ALWAYS minor currency units (cents). 29900 = $299.00.
  * - livemode = false transactions MUST NOT count toward live sales or live revenue.
  * - Live revenue and live sales strictly filter:
  *   livemode = true AND payment_status = 'paid' AND status = 'completed'.

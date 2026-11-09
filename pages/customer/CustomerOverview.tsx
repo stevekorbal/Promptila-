@@ -534,7 +534,7 @@ export const CustomerOverview: React.FC = () => {
                 to="/checkout"
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm active:scale-98 text-center"
               >
-                <span>Get My Blueprint — $297</span>
+                <span>Get My Blueprint — $299</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

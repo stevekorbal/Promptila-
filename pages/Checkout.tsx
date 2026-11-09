@@ -110,9 +110,58 @@ const StripePaymentForm = React.forwardRef<StripePaymentFormHandle, StripePaymen
 );
 StripePaymentForm.displayName = 'StripePaymentForm';
 
+const AUDIT_STORAGE_KEY = 'promptila_audit_id';
+
+export const sanitizeAuditId = (val: string | null | undefined): string => {
+  if (!val) return '';
+  const cleaned = val.trim().toUpperCase();
+  return /^AUD-\d{4,}$/.test(cleaned) ? cleaned : '';
+};
+
 const Checkout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const auditId = searchParams.get('audit_id');
+
+  // Read audit_id from the URL, uppercase it, keep only if matches /^AUD-\d{4,}$/, else ""
+  // Keep it while customer is on the page (save in sessionStorage so refresh does not lose it)
+  // Do not show it or let the customer edit it
+  const [auditId, setAuditId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const fromUrl = new URLSearchParams(window.location.search).get('audit_id');
+    const validUrl = sanitizeAuditId(fromUrl);
+    if (validUrl) {
+      try {
+        sessionStorage.setItem(AUDIT_STORAGE_KEY, validUrl);
+      } catch {}
+      return validUrl;
+    }
+    try {
+      const fromStorage = sessionStorage.getItem(AUDIT_STORAGE_KEY);
+      return sanitizeAuditId(fromStorage);
+    } catch {
+      return '';
+    }
+  });
+
+  // Sync audit_id if searchParams change
+  useEffect(() => {
+    const fromUrl = searchParams.get('audit_id');
+    const validUrl = sanitizeAuditId(fromUrl);
+    if (validUrl) {
+      setAuditId(validUrl);
+      try {
+        sessionStorage.setItem(AUDIT_STORAGE_KEY, validUrl);
+      } catch {}
+    } else if (!auditId) {
+      try {
+        const fromStorage = sessionStorage.getItem(AUDIT_STORAGE_KEY);
+        const validStorage = sanitizeAuditId(fromStorage);
+        if (validStorage) {
+          setAuditId(validStorage);
+        }
+      } catch {}
+    }
+  }, [searchParams]);
+
   const { user } = useAuth();
   const { plans } = useServices();
 
@@ -134,6 +183,7 @@ const Checkout: React.FC = () => {
   // Stripe integration state
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(() => cachedStripePromise);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [isInitializingPayment, setIsInitializingPayment] = useState<boolean>(false);
   const [paymentInitError, setPaymentInitError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -217,13 +267,6 @@ const Checkout: React.FC = () => {
       return;
     }
 
-    if (!auditId) {
-      setPaymentInitError(
-        'An audit ID (e.g. AUD-XXXXXX) is required to order the DIY AI Visibility Blueprint. Please use the link provided in your audit report.'
-      );
-      return;
-    }
-
     // Do not initialize until all required customer and business details are completed
     if (!isDetailsComplete) {
       return;
@@ -246,11 +289,11 @@ const Checkout: React.FC = () => {
       setPaymentInitError(null);
 
       const currentPayload = {
-        audit_id: auditId,
-        email: formData.email.trim(),
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        businessName: formData.businessName.trim(),
+        service: selectedPlan.id,
+        audit_id: auditId || '',
+        customer_email: formData.email.trim().toLowerCase(),
+        customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
+        business_name: formData.businessName.trim(),
         website: formData.website.trim(),
         phone: formData.phone.trim(),
       };
@@ -273,6 +316,9 @@ const Checkout: React.FC = () => {
         if (isMounted) {
           if (data.clientSecret) {
             setClientSecret(data.clientSecret);
+            if (data.paymentIntentId) {
+              setPaymentIntentId(data.paymentIntentId);
+            }
           } else {
             throw new Error('No client secret returned from payment service');
           }
@@ -354,14 +400,7 @@ const Checkout: React.FC = () => {
 
     if (selectedPlan.id !== 'diy') {
       setSubmissionError(
-        `Instant card checkout is currently active for the DIY Blueprint ($297). Please select the DIY Blueprint to complete payment online, or contact us regarding ${selectedPlan.name}.`
-      );
-      return;
-    }
-
-    if (!auditId) {
-      setSubmissionError(
-        'An audit ID (e.g. AUD-XXXXXX) is required to order the DIY Blueprint. Please access checkout through your audit report.'
+        `Instant card checkout is currently active for the DIY Blueprint ($299). Please select the DIY Blueprint to complete payment online, or contact us regarding ${selectedPlan.name}.`
       );
       return;
     }
@@ -380,6 +419,31 @@ const Checkout: React.FC = () => {
     setSubmissionError(null);
 
     try {
+      // Card payment: put the metadata on the PaymentIntent and set receipt_email to the customer email.
+      // Call stripe.paymentIntents.update on the server with metadata and receipt_email right before
+      // the payment is confirmed, so Stripe always has the email and details the customer typed.
+      if (paymentIntentId) {
+        try {
+          await fetch('/api/create-payment-intent', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              payment_intent_id: paymentIntentId,
+              service: selectedPlan.id,
+              audit_id: auditId || '',
+              customer_email: formData.email.trim().toLowerCase(),
+              customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
+              business_name: formData.businessName.trim(),
+              website: formData.website.trim(),
+            }),
+          });
+        } catch (updateErr) {
+          console.warn('PaymentIntent metadata update warning before confirmation:', updateErr);
+        }
+      }
+
       const { error, paymentIntent } = await stripePaymentFormRef.current.confirmPayment();
 
       if (error) {
@@ -460,12 +524,6 @@ const Checkout: React.FC = () => {
                 <span className="text-slate-500">Service Plan</span>
                 <span className="font-bold text-slate-900">{selectedPlan.name}</span>
               </div>
-              {auditId && (
-                <div className="flex justify-between items-center pb-3 border-b border-slate-200 text-sm">
-                  <span className="text-slate-500">Audit Dossier ID</span>
-                  <span className="font-mono font-bold text-indigo-600">{auditId}</span>
-                </div>
-              )}
               <div className="flex justify-between items-center pb-3 border-b border-slate-200 text-sm">
                 <span className="text-slate-500">Billing Type</span>
                 <span className="font-medium text-slate-900 capitalize">
@@ -844,14 +902,14 @@ const Checkout: React.FC = () => {
                         <span>Online checkout for {selectedPlan.name} is in preparation</span>
                       </div>
                       <p className="text-slate-600 mb-3 text-xs leading-relaxed">
-                        Online Stripe credit card checkout is currently active for the DIY AI Visibility Blueprint ($297).
+                        Online Stripe credit card checkout is currently active for the DIY AI Visibility Blueprint ($299).
                       </p>
                       <button
                         type="button"
                         onClick={() => handleServiceChange('diy')}
                         className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline"
                       >
-                        Switch to DIY AI Visibility Blueprint ($297)
+                        Switch to DIY AI Visibility Blueprint ($299)
                       </button>
                     </div>
                   )}
@@ -920,14 +978,6 @@ const Checkout: React.FC = () => {
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
                   {selectedPlan.description}
                 </p>
-
-                {/* Audit ID badge if attached */}
-                {auditId && (
-                  <div className="mb-3 px-3 py-2 bg-indigo-50/70 border border-indigo-100 rounded-lg flex items-center justify-between text-xs">
-                    <span className="text-indigo-700 font-medium">Audit Reference:</span>
-                    <span className="font-mono font-bold text-indigo-900">{auditId}</span>
-                  </div>
-                )}
 
                 {/* Plan Highlights */}
                 <ul className="space-y-2 pt-3 border-t border-slate-200/60">

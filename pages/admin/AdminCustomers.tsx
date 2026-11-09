@@ -276,7 +276,7 @@ export const AdminCustomers: React.FC = () => {
               className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             >
               <option value="all">All Blueprint Status</option>
-              <option value="purchased">Purchased ($297)</option>
+              <option value="purchased">Purchased ($299)</option>
               <option value="not_purchased">Not Purchased</option>
             </select>
 
@@ -447,7 +447,7 @@ export const AdminCustomers: React.FC = () => {
                           Purchased
                         </span>
                         <span className="text-[11px] font-bold text-slate-700 font-mono mt-0.5">
-                          $297
+                          $299
                         </span>
                       </div>
                     );

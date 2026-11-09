@@ -38,7 +38,7 @@ export const AdminLayout: React.FC = () => {
       return { title: 'Customers', subtitle: 'Leads, customers, businesses, and purchase activity' };
     }
     if (path.startsWith('/admin/blueprint-orders')) {
-      return { title: 'Blueprint Orders', subtitle: 'Self-paced $297 Blueprint sales and automated delivery' };
+      return { title: 'Blueprint Orders', subtitle: 'Self-paced $299 Blueprint sales and automated delivery' };
     }
     if (path.startsWith('/admin/dfy-orders')) {
       return { title: 'DFY Orders', subtitle: '$999 Done-For-You Optimization sales and fulfillment' };

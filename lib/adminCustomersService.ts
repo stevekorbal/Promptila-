@@ -286,7 +286,7 @@ export async function fetchAdminCustomers(): Promise<{
         (o) => o.livemode === true && o.payment_status === 'paid' && o.status === 'completed'
       );
       const hasLivePaidBlueprint = qualifyingLiveOrders.length > 0;
-      const blueprintAmount = hasLivePaidBlueprint ? (qualifyingLiveOrders[0].amount_paid || 29700) : null;
+      const blueprintAmount = hasLivePaidBlueprint ? (qualifyingLiveOrders[0].amount_paid || 29900) : null;
 
       // Derive Customer Stage
       let stage: CustomerStage = 'other_lead';

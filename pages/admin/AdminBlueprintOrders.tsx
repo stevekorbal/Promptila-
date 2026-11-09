@@ -212,7 +212,7 @@ export const AdminBlueprintOrders: React.FC = () => {
         <MetricCard
           title="Live Blueprint Sales"
           value={metrics.liveSalesCount}
-          subtext="$297 Blueprint purchases"
+          subtext="$299 Blueprint purchases"
           icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
           iconBg="bg-emerald-50"
           loading={loading}

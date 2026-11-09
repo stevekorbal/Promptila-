@@ -3,6 +3,11 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import cors from "cors";
 
+import stripeConfigHandler from "./api/stripe-config.ts";
+import createPaymentIntentHandler from "./api/create-payment-intent.ts";
+import updatePaymentIntentHandler from "./api/update-payment-intent.ts";
+import createCheckoutSessionHandler from "./api/create-checkout-session.ts";
+
 dotenv.config();
 
 async function startServer() {
@@ -11,6 +16,23 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
+
+  // Stripe API routes
+  app.all("/api/stripe-config", (req, res) => {
+    return stripeConfigHandler(req as any, res as any);
+  });
+
+  app.all("/api/create-payment-intent", (req, res) => {
+    return createPaymentIntentHandler(req as any, res as any);
+  });
+
+  app.all("/api/update-payment-intent", (req, res) => {
+    return updatePaymentIntentHandler(req as any, res as any);
+  });
+
+  app.all("/api/create-checkout-session", (req, res) => {
+    return createCheckoutSessionHandler(req as any, res as any);
+  });
 
   // Audit webhook route (audits start automatically inside Supabase database)
   app.post("/api/audit-webhook", async (req, res) => {

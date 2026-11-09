@@ -71,13 +71,13 @@ const AdminDashboard: React.FC = () => {
       ]);
       setOrders([
         { id: 'ord-101', user_id: 'usr-1', service_name: 'DFY Optimization', amount: 1199, status: 'completed', billing_type: 'one-time', created_at: '2026-08-10T11:30:00Z' },
-        { id: 'ord-102', user_id: 'usr-2', service_name: 'DIY Blueprint', amount: 297, status: 'completed', billing_type: 'one-time', created_at: '2026-08-12T15:00:00Z' },
+        { id: 'ord-102', user_id: 'usr-2', service_name: 'DIY Blueprint', amount: 299, status: 'completed', billing_type: 'one-time', created_at: '2026-08-12T15:00:00Z' },
       ]);
       setSubscriptions([
         { id: 'sub-201', user_id: 'usr-1', service_name: 'Monthly Monitoring', status: 'active', current_period_end: '2026-10-10T00:00:00Z', created_at: '2026-08-10T11:30:00Z' },
       ]);
       setServices([
-        { id: 'srv-1', slug: 'diy', name: 'DIY Blueprint', description: 'Self-paced AI search optimization framework', price: 297, billing_type: 'one-time' },
+        { id: 'srv-1', slug: 'diy', name: 'DIY Blueprint', description: 'Self-paced AI search optimization framework', price: 299, billing_type: 'one-time' },
         { id: 'srv-2', slug: 'dfy', name: 'DFY Optimization', description: 'Complete turnkey implementation by Promptila team', price: 999, billing_type: 'one-time' },
         { id: 'srv-3', slug: 'monitoring', name: 'Monthly Monitoring', description: '24/7 brand surveillance & displacement defense', price: 99, billing_type: 'recurring' },
       ]);

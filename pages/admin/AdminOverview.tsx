@@ -632,7 +632,7 @@ export const AdminOverview: React.FC = () => {
         {/* 3. Conversion Funnel */}
         <ChartCard
           title="Conversion Funnel"
-          subtitle="Intake → DIY ($297) → DFY ($999)"
+          subtitle="Intake → DIY ($299) → DFY ($999)"
           icon={<Layers className="w-4 h-4" />}
           iconBg="bg-indigo-50"
           iconColor="text-indigo-600"
@@ -718,7 +718,7 @@ export const AdminOverview: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1.5">
-                  <span>$297 self-paced execution framework</span>
+                  <span>$299 self-paced execution framework</span>
                   <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-0.5">
                     Next step →
                   </span>
@@ -756,7 +756,7 @@ export const AdminOverview: React.FC = () => {
           )}
         </ChartCard>
 
-        {/* 4. Orders Breakdown: Blueprint ($297) vs DFY ($999) */}
+        {/* 4. Orders Breakdown: Blueprint ($299) vs DFY ($999) */}
         <ChartCard
           title="Orders & Revenue Breakdown"
           subtitle="DIY Blueprint vs Turnkey DFY"
@@ -814,12 +814,12 @@ export const AdminOverview: React.FC = () => {
 
               {/* Product stats list */}
               <div className="flex-1 space-y-3 w-full">
-                {/* DIY Blueprint ($297) */}
+                {/* DIY Blueprint ($299) */}
                 <div className="p-2.5 rounded-xl border border-slate-100 bg-indigo-50/30 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0" />
                     <div>
-                      <p className="text-xs font-bold text-slate-900">DIY Blueprint ($297)</p>
+                      <p className="text-xs font-bold text-slate-900">DIY Blueprint ($299)</p>
                       <p className="text-[11px] text-slate-500">
                         {totalConnectedOrders > 0
                           ? `${blueprintOrdersCount} ${blueprintOrdersCount === 1 ? 'order' : 'orders'} · 100% of sales volume`

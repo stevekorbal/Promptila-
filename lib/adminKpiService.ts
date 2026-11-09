@@ -132,8 +132,8 @@ export function calculateTrend(
  * USD revenue = SUM(amount_paid) / 100
  *
  * Examples:
- * 29700 = $297.00
- * 59400 = $594.00
+ * 29900 = $299.00
+ * 59800 = $598.00
  * 89100 = $891.00
  */
 export function formatCurrencyUsd(amountRaw: number): { formatted: string; dollars: number } {
@@ -279,7 +279,7 @@ export async function fetchAdminKpis(dateRange: string): Promise<AdminKpisData> 
         change: trend.change,
         changeType: trend.changeType,
         timeframe: timeframeLabel,
-        subtext: `$297/ea · ${currentBlueprintSales} units`,
+        subtext: `$299/ea · ${currentBlueprintSales} units`,
       };
     }
 

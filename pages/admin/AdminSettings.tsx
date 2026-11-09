@@ -304,7 +304,7 @@ export const AdminSettings: React.FC = () => {
               /api/create-payment-intent
             </code>
             <p className="text-[10px] text-slate-400 mt-1.5">
-              Stripe custom payment intent generator ($297.00)
+              Stripe custom payment intent generator ($299.00)
             </p>
           </div>
 

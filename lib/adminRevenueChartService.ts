@@ -200,7 +200,7 @@ export async function fetchRevenueChartData(dateRange: string): Promise<RevenueC
     // Calculate comparison trend
     const trend = calculateTrend(totalRevenue, prevRevenue);
 
-    // Format total revenue (e.g. "$0.00 USD" or "$297.00 USD")
+    // Format total revenue (e.g. "$0.00 USD" or "$299.00 USD")
     const totalRevenueFormatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',

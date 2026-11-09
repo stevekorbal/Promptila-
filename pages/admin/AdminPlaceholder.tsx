@@ -32,7 +32,7 @@ export const AdminPlaceholder: React.FC<AdminPlaceholderProps> = ({
     }
     if (path.includes('blueprint-orders')) {
       return {
-        title: 'Blueprint Orders ($297)',
+        title: 'Blueprint Orders ($299)',
         desc: 'DIY Blueprint orders, Stripe payment verification, and deliverable download logs.',
         badge: 'Orders Module'
       };
