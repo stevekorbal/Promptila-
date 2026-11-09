@@ -360,7 +360,7 @@ const Checkout: React.FC = () => {
         setGuestAuthMode('guest');
         setRegisterNotice({
           type: 'info',
-          message: 'Your account was created. Check your email if confirmation is required. You can continue checkout as a guest.',
+          message: 'Your account was created. Check your email if confirmation is required. Please confirm your email and sign in before payment.',
         });
       }
     } catch (err: any) {
@@ -733,7 +733,7 @@ const Checkout: React.FC = () => {
     }
 
     // Do not initialize until all required customer and business details are completed
-    if (!isDetailsComplete) {
+    if (!isDetailsComplete || !user) {
       return;
     }
 
@@ -764,10 +764,14 @@ const Checkout: React.FC = () => {
       };
 
       try {
+        const sessionResult = await getSupabaseClient()?.auth.getSession();
+        const accessToken = sessionResult?.data.session?.access_token;
+        if (!accessToken) throw new Error('Please sign in before payment.');
         const response = await fetch('/api/create-payment-intent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify(currentPayload),
         });
@@ -809,6 +813,7 @@ const Checkout: React.FC = () => {
     selectedPlan.id,
     auditId,
     isDetailsComplete,
+    user,
     formData.email,
     formData.firstName,
     formData.lastName,
@@ -871,6 +876,11 @@ const Checkout: React.FC = () => {
       return;
     }
 
+    if (!user) {
+      setSubmissionError('Please sign in or create an account before paying.');
+      return;
+    }
+
     if (!isDetailsComplete) {
       setSubmissionError('Please complete all required customer and business details before proceeding to payment.');
       return;
@@ -890,10 +900,14 @@ const Checkout: React.FC = () => {
       // the payment is confirmed, so Stripe always has the email and details the customer typed.
       if (paymentIntentId) {
         try {
-          await fetch('/api/create-payment-intent', {
+          const sessionResult = await getSupabaseClient()?.auth.getSession();
+          const accessToken = sessionResult?.data.session?.access_token;
+          if (!accessToken) throw new Error('Please sign in before payment.');
+          const updateResponse = await fetch('/api/create-payment-intent', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               payment_intent_id: paymentIntentId,
@@ -905,8 +919,9 @@ const Checkout: React.FC = () => {
               website: formData.website.trim(),
             }),
           });
+          if (!updateResponse.ok) throw new Error('Unable to verify payment details. Please retry.');
         } catch (updateErr) {
-          console.warn('PaymentIntent metadata update warning before confirmation:', updateErr);
+          throw updateErr;
         }
       }
 
@@ -1055,6 +1070,7 @@ const Checkout: React.FC = () => {
     !isProcessing &&
     !isInitializingPayment &&
     isDetailsComplete &&
+    Boolean(user) &&
     (selectedPlan.id !== 'diy' || (Boolean(stripePromise) && Boolean(clientSecret)));
 
   return (
