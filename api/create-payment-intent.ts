@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
 
 function getStripeInstance(): Stripe {
   const secretKey = process.env.STRIPE_SECRET_KEY || '';
@@ -69,6 +70,17 @@ export default async function handler(
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  const bearer = req.headers.authorization || '';
+  const token = /^Bearer (.+)$/i.exec(bearer)?.[1];
+  if (!token) return res.status(401).json({ error: 'Sign in before checkout.' });
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\\/rest\\/v1\\/?$/, '').replace(/\\/$/, '');
+  const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: 'Checkout authentication is not configured.' });
+  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+  const authenticatedUserId = authData.user.id;
+
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
     return res.status(500).json({
@@ -81,22 +93,23 @@ export default async function handler(
     const body = req.body || {};
     const metadata = extractStripeMetadata(body);
     const customerEmail = metadata.customer_email;
+    const securedMetadata = { ...metadata, user_id: authenticatedUserId };
 
     // Check if updating an existing PaymentIntent right before confirmation
     const intentIdToUpdate = body.payment_intent_id || body.paymentIntentId;
 
     if (intentIdToUpdate && typeof intentIdToUpdate === 'string') {
       const updateParams: Stripe.PaymentIntentUpdateParams = {
-        metadata,
+        metadata: securedMetadata,
       };
       if (customerEmail) {
         updateParams.receipt_email = customerEmail;
       }
 
-      const updatedIntent = await stripe.paymentIntents.update(
-        intentIdToUpdate,
-        updateParams
-      );
+      const existingIntent = await stripe.paymentIntents.retrieve(intentIdToUpdate);
+      if (existingIntent.metadata?.user_id !== authenticatedUserId) return res.status(403).json({ error: 'Payment session does not belong to this account.' });
+      if (existingIntent.status !== 'requires_payment_method' && existingIntent.status !== 'requires_confirmation') return res.status(409).json({ error: 'Payment session can no longer be edited.' });
+      const updatedIntent = await stripe.paymentIntents.update(intentIdToUpdate, updateParams);
 
       return res.status(200).json({
         clientSecret: updatedIntent.client_secret,
@@ -112,7 +125,7 @@ export default async function handler(
     const createParams: Stripe.PaymentIntentCreateParams = {
       amount,
       currency: 'usd',
-      metadata,
+      metadata: securedMetadata,
       automatic_payment_methods: {
         enabled: true,
       },
