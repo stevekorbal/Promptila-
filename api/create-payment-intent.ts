@@ -73,7 +73,7 @@ export default async function handler(
   const bearer = req.headers.authorization || '';
   const token = /^Bearer (.+)$/i.exec(bearer)?.[1];
   if (!token) return res.status(401).json({ error: 'Sign in before checkout.' });
-  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\\/rest\\/v1\\/?$/, '').replace(/\\/$/, '');
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
   const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: 'Checkout authentication is not configured.' });
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
