@@ -62,12 +62,12 @@ export const AdminSettings: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900">System Health & Integrations</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Production infrastructure and external operational services status
+              Integration configuration overview; live health checks are not available here
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            All Systems Operational
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            Health Not Verified
           </span>
         </div>
 
@@ -79,7 +79,7 @@ export const AdminSettings: React.FC = () => {
                 <Database className="w-4 h-4" />
               </div>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Connected
+                Not live-tested
               </span>
             </div>
             <div>
@@ -97,7 +97,7 @@ export const AdminSettings: React.FC = () => {
                 <CreditCard className="w-4 h-4" />
               </div>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Configured
+                Not live-tested
               </span>
             </div>
             <div>
@@ -115,7 +115,7 @@ export const AdminSettings: React.FC = () => {
                 <Workflow className="w-4 h-4" />
               </div>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Active
+                Not live-tested
               </span>
             </div>
             <div>
@@ -133,7 +133,7 @@ export const AdminSettings: React.FC = () => {
                 <Mail className="w-4 h-4" />
               </div>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Connected
+                Not live-tested
               </span>
             </div>
             <div>
