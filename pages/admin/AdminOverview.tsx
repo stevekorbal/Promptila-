@@ -243,6 +243,36 @@ export const AdminOverview: React.FC = () => {
     setAlertsState((prev) => prev.filter((a) => a.id !== alertToDismiss.id));
   };
 
+  const exportOverviewCsv = () => {
+    // Export the data actually loaded in the Overview, never fabricate missing metrics.
+    const quote = (value: unknown) => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+    const rows: unknown[][] = [
+      ['Section', 'Metric', 'Value', 'Date range'],
+      ['KPI', 'Free Audits', kpisData?.freeAudits.value ?? 'Unavailable', dateRange],
+      ['KPI', 'Blueprint Sales', kpisData?.blueprintSales.value ?? 'Unavailable', dateRange],
+      ['KPI', 'Blueprint Revenue', kpisData?.revenue.value ?? 'Unavailable', dateRange],
+      ['KPI', 'Blueprint Conversion Rate', kpisData?.blueprintConversionRate.value ?? 'Unavailable', dateRange],
+      ['KPI', 'DFY Sales', 'Not connected', dateRange],
+      ['KPI', 'DFY Conversion Rate', 'Not connected', dateRange],
+      ['Recent Audits', 'Audit ID', 'Business', 'Score'],
+      ...recentAuditsData.map(a => ['Recent Audits', a.audit_id || a.id, a.business_name || '', resolveAuditScore(a) ?? '']),
+      ['Recent Orders', 'Order ID', 'Business', 'Amount (USD)'],
+      ...recentOrdersData.map(o => ['Recent Orders', o.id, o.business_name || '', (o.amount_paid / 100).toFixed(2)]),
+      ['Email Activity', 'Record ID', 'Status', ''],
+      ...emailActivityData.map(e => ['Email Activity', e.id, e.status || '', '']),
+      ['Alerts', 'Active count', alertsError ? 'Unavailable' : alertsState.length, ''],
+    ];
+    const csv = '\uFEFF' + rows.map(row => row.map(quote).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'promptila-admin-overview-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   // Orders & Revenue breakdown computed from live Blueprint orders
   const blueprintOrdersCount = revenueData
     ? revenueData.points.reduce((acc, p) => acc + p.orders, 0)
@@ -300,7 +330,7 @@ export const AdminOverview: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => alert('Exporting admin summary CSV...')}
+            onClick={exportOverviewCsv}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -932,7 +962,7 @@ export const AdminOverview: React.FC = () => {
           <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
             <p className="font-semibold text-slate-700">No issues need attention</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">All monitored Promptila workflows are operating normally.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">No issues were found by the current alert checks. This does not verify every workflow.</p>
           </div>
         )}
       </div>
