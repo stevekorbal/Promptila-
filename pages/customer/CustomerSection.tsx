@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, AlertTriangle, FileSearch, FileText, CheckCircle2, ShoppingBag } from 'lucide-react';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useCustomerData } from './useCustomerData.ts';
 
 type Section = 'overview' | 'audit' | 'blueprint' | 'recommendations' | 'progress' | 'dfy' | 'monitoring' | 'account';
@@ -27,7 +27,6 @@ export const CustomerSection: React.FC<{section:Section}> = ({section}) => {
   const latest = data.audits[0];
   const currentScore = score(latest);
   const reports = data.reports;
-  const paidOrders = data.orders.filter(o => ['paid','completed','succeeded'].includes(String(o.status||'').toLowerCase()));
   const summary = sections[section];
   return <div className="space-y-5">
     <div className="flex items-start justify-between gap-3">
