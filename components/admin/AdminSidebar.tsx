@@ -89,8 +89,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     }
   };
 
-  const displayName = profile?.full_name || (user?.email ? user.email.split('@')[0] : 'Sarah Miley');
-  const displayEmail = user?.email || 'admin@promptila.com';
+  const displayName = profile?.full_name || (user?.email ? user.email.split('@')[0] : 'Administrator');
+  const displayEmail = user?.email || 'No email available';
 
   return (
     <aside className="w-64 h-full bg-[#f8fafc] border-r border-slate-200/80 flex flex-col justify-between select-none">
