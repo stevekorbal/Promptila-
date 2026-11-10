@@ -65,6 +65,7 @@ import {
 export const AdminOverview: React.FC = () => {
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState('Last 30 Days');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [kpisLoading, setKpisLoading] = useState(true);
   const [kpisData, setKpisData] = useState<AdminKpisData | null>(null);
   const [revenueLoading, setRevenueLoading] = useState(true);
@@ -108,7 +109,7 @@ export const AdminOverview: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -134,7 +135,7 @@ export const AdminOverview: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -160,7 +161,7 @@ export const AdminOverview: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -213,7 +214,7 @@ export const AdminOverview: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [dateRange]);
+  }, [dateRange, refreshKey]);
 
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState<string | null>(null);
@@ -237,11 +238,7 @@ export const AdminOverview: React.FC = () => {
 
   useEffect(() => {
     loadAlerts();
-  }, [loadAlerts]);
-
-  const handleDismissAlert = (alertToDismiss: AdminAlert) => {
-    setAlertsState((prev) => prev.filter((a) => a.id !== alertToDismiss.id));
-  };
+  }, [loadAlerts, refreshKey]);
 
   const exportOverviewCsv = () => {
     // Export the data actually loaded in the Overview, never fabricate missing metrics.
@@ -270,7 +267,7 @@ export const AdminOverview: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Orders & Revenue breakdown computed from live Blueprint orders
@@ -331,6 +328,7 @@ export const AdminOverview: React.FC = () => {
           <button
             type="button"
             onClick={exportOverviewCsv}
+            disabled={kpisLoading || revenueLoading || auditVolumeLoading || recentAuditsLoading || recentOrdersLoading || emailActivityLoading || alertsLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -339,6 +337,10 @@ export const AdminOverview: React.FC = () => {
         </div>
       </div>
 
+      <button type="button" onClick={() => setRefreshKey(k => k + 1)} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1.5" aria-label="Refresh overview data"><RefreshCw className="w-3.5 h-3.5" /> Refresh all overview data</button>
+      {(kpisData?.freeAudits.error || kpisData?.blueprintSales.error || kpisData?.revenue.error || revenueData?.error || auditVolumeData?.error) && (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">Some dashboard metrics could not be loaded. Values marked unavailable are not zero. Try refreshing or check administrator database access.</div>
+      )}
       {/* 6 Primary KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
         {/* 1. Free Audits */}
@@ -387,7 +389,7 @@ export const AdminOverview: React.FC = () => {
           change={kpisData?.revenue.change}
           changeType={kpisData?.revenue.changeType}
           timeframe={kpisData?.revenue.timeframe}
-          subtext="Blueprint revenue"
+          subtext={kpisData?.revenue.error ? 'Data unavailable' : 'Verified live Blueprint revenue only'}
           icon={<DollarSign className="w-4 h-4" />}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
@@ -789,7 +791,7 @@ export const AdminOverview: React.FC = () => {
         {/* 4. Orders Breakdown: Blueprint ($299) vs DFY ($999) */}
         <ChartCard
           title="Orders & Revenue Breakdown"
-          subtitle="DIY Blueprint vs Turnkey DFY"
+          subtitle="Verified live Blueprint orders only; DFY checkout not connected"
           icon={<PieChartIcon className="w-4 h-4" />}
           iconBg="bg-purple-50"
           iconColor="text-purple-600"
