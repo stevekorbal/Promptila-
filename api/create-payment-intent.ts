@@ -97,6 +97,16 @@ export default async function handler(
     const stripe = getStripeInstance();
     const body = req.body || {};
     const metadata = extractStripeMetadata(body);
+    // DIY orders must identify a completed audit before any payment is created.
+    if (metadata.service === 'diy' && !metadata.audit_id) {
+      return res.status(400).json({ error: 'Find and select your completed free audit before paying.' });
+    }
+    if (metadata.service === 'diy' && (
+      !authData.user.email_confirmed_at ||
+      metadata.customer_email !== String(authData.user.email || '').trim().toLowerCase()
+    )) {
+      return res.status(403).json({ error: 'Use your verified account email, the same one used for the free audit.' });
+    }
     // A supplied audit must be owned by the authenticated payer. This is checked
     // server-side on both PaymentIntent creation and metadata updates.
     const suppliedAuditId = body.audit_id ?? body.auditId;
@@ -112,12 +122,20 @@ export default async function handler(
       if (claimError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
       const { data: ownedAudit, error: auditError } = await userSupabase
         .from('audits')
-        .select('id')
+        .select('id, overall_score, status, needs_review, contact_email')
         .eq('audit_id', metadata.audit_id)
         .eq('user_id', authenticatedUserId)
         .maybeSingle();
       if (auditError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
       if (!ownedAudit) return res.status(403).json({ error: 'This audit does not belong to your account.' });
+      if (metadata.service === 'diy' && (
+        ownedAudit.overall_score === null ||
+        !['free_audit_sent', 'completed'].includes(ownedAudit.status) ||
+        ownedAudit.needs_review ||
+        String(ownedAudit.contact_email || '').trim().toLowerCase() !== metadata.customer_email
+      )) {
+        return res.status(403).json({ error: 'This free audit is not eligible for Blueprint checkout.' });
+      }
     }
     const customerEmail = metadata.customer_email;
     const securedMetadata = { ...metadata, user_id: authenticatedUserId };
