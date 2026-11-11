@@ -111,7 +111,7 @@ const StripePaymentForm = React.forwardRef<StripePaymentFormHandle, StripePaymen
 );
 StripePaymentForm.displayName = 'StripePaymentForm';
 
-const AUDIT_STORAGE_KEY = 'promptila_audit_id';
+// Audit IDs from email links are kept in the URL. Do not reuse a stale session audit for pricing purchases.
 
 export const sanitizeAuditId = (val: string | null | undefined): string => {
   if (!val) return '';
@@ -125,42 +125,11 @@ const Checkout: React.FC = () => {
   // Read audit_id from the URL, uppercase it, keep only if matches /^AUD-\d{4,}$/, else ""
   // Keep it while customer is on the page (save in sessionStorage so refresh does not lose it)
   // Do not show it or let the customer edit it
-  const [auditId, setAuditId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    const fromUrl = new URLSearchParams(window.location.search).get('audit_id');
-    const validUrl = sanitizeAuditId(fromUrl);
-    if (validUrl) {
-      try {
-        sessionStorage.setItem(AUDIT_STORAGE_KEY, validUrl);
-      } catch {}
-      return validUrl;
-    }
-    try {
-      const fromStorage = sessionStorage.getItem(AUDIT_STORAGE_KEY);
-      return sanitizeAuditId(fromStorage);
-    } catch {
-      return '';
-    }
-  });
-
-  // Sync audit_id if searchParams change
+  const [auditId, setAuditId] = useState<string>(() =>
+    typeof window === 'undefined' ? '' : sanitizeAuditId(new URLSearchParams(window.location.search).get('audit_id'))
+  );
   useEffect(() => {
-    const fromUrl = searchParams.get('audit_id');
-    const validUrl = sanitizeAuditId(fromUrl);
-    if (validUrl) {
-      setAuditId(validUrl);
-      try {
-        sessionStorage.setItem(AUDIT_STORAGE_KEY, validUrl);
-      } catch {}
-    } else if (!auditId) {
-      try {
-        const fromStorage = sessionStorage.getItem(AUDIT_STORAGE_KEY);
-        const validStorage = sanitizeAuditId(fromStorage);
-        if (validStorage) {
-          setAuditId(validStorage);
-        }
-      } catch {}
-    }
+    setAuditId(sanitizeAuditId(searchParams.get('audit_id')));
   }, [searchParams]);
 
   const { user, profile, signIn, signOut, signUp } = useAuth();
@@ -170,6 +139,11 @@ const Checkout: React.FC = () => {
   const rawProduct = searchParams.get('product') || searchParams.get('service');
   const selectedPlan = getServicePlan(rawProduct, plans);
 
+  const [auditMatches, setAuditMatches] = useState<Array<{ audit_id: string; business_name: string; website: string | null; location: string | null }>>([]);
+  const [auditLookupEmail, setAuditLookupEmail] = useState('');
+  const [auditLookupLoading, setAuditLookupLoading] = useState(false);
+  const [auditLookupError, setAuditLookupError] = useState('');
+  const [auditLookupDone, setAuditLookupDone] = useState(false);
   const [formData, setFormData] = useState<CheckoutFormData>({
     firstName: '',
     lastName: '',
@@ -666,6 +640,7 @@ const Checkout: React.FC = () => {
   };
 
   const isDetailsComplete = Boolean(
+    (selectedPlan.id !== 'diy' || Boolean(auditId)) &&
     formData.firstName.trim() &&
     formData.lastName.trim() &&
     formData.email.trim() &&
@@ -859,9 +834,55 @@ const Checkout: React.FC = () => {
     setSearchParams(nextParams);
   };
 
+  const findCheckoutAudits = async () => {
+    setAuditLookupError('');
+    setAuditLookupDone(false);
+    setAuditMatches([]);
+    setAuditId('');
+    const email = formData.email.trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      setAuditLookupError('Enter the email used for your free audit.');
+      return;
+    }
+    setAuditLookupLoading(true);
+    try {
+      const session = await getSupabaseClient()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      if (!token) throw new Error('Sign in with the email used for your free audit first.');
+      const response = await fetch('/api/checkout-audits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
+      const matches = Array.isArray(result.audits) ? result.audits : [];
+      setAuditMatches(matches);
+      setAuditLookupEmail(email);
+      setAuditLookupDone(true);
+      if (matches.length === 1) selectCheckoutAudit(matches[0]);
+    } catch (error: any) {
+      setAuditLookupError(error?.message || 'Unable to find your audit.');
+    } finally {
+      setAuditLookupLoading(false);
+    }
+  };
+
+  const selectCheckoutAudit = (audit: { audit_id: string; business_name: string; website: string | null }) => {
+    const id = sanitizeAuditId(audit.audit_id);
+    if (!id) return;
+    setAuditId(id);
+    setFormData(prev => ({ ...prev, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     userEditedFieldsRef.current.add(name as keyof CheckoutFormData);
+    if (name === 'email' && value.trim().toLowerCase() !== auditLookupEmail) {
+      setAuditMatches([]);
+      setAuditLookupDone(false);
+      setAuditId(sanitizeAuditId(searchParams.get('audit_id')));
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -879,6 +900,11 @@ const Checkout: React.FC = () => {
 
     if (!user) {
       setSubmissionError('Please sign in or create an account before paying.');
+      return;
+    }
+
+    if (selectedPlan.id === 'diy' && !auditId) {
+      setSubmissionError('Find and select your completed free audit before paying.');
       return;
     }
 
@@ -1417,6 +1443,34 @@ const Checkout: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
+                    <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
+                      <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
+                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. Sign in with that same verified email.</p>
+                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading || !user}
+                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                        {auditLookupLoading ? 'Checking…' : 'Find my free audit'}
+                      </button>
+                      {!user && <p className="text-xs text-amber-700">Please sign in or create an account first.</p>}
+                      {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
+                      {auditLookupDone && auditMatches.length === 0 && (
+                        <p className="text-xs text-slate-700">No completed free audit was found for this email. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
+                      )}
+                      {auditMatches.length > 0 && (
+                        <div className="space-y-2">
+                          {auditMatches.length > 1 && <p className="text-xs text-slate-700">Multiple audits found. Select the correct business:</p>}
+                          {auditMatches.map(a => (
+                            <button key={a.audit_id} type="button" onClick={() => selectCheckoutAudit(a)}
+                              className={`block w-full rounded-lg border p-3 text-left text-xs ${auditId === a.audit_id ? 'border-indigo-600 bg-white font-bold' : 'border-slate-200 bg-white'}`}>
+                              {a.business_name} — {a.audit_id}{a.location ? ` · ${a.location}` : ''}
+                            </button>
+                          ))}
+                          {auditId && <p className="text-xs text-emerald-700">Selected audit: {auditId}. You can continue to payment.</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <label htmlFor="phone" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
