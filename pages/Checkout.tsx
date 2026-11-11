@@ -155,8 +155,8 @@ const Checkout: React.FC = () => {
     state: '',
   });
 
-  // Guest auth mode: 'guest' (default) | 'login' | 'register'
-  const [guestAuthMode, setGuestAuthMode] = useState<'guest' | 'login' | 'register'>('guest');
+  // Checkout auth mode: 'login' (default) | 'register'
+  const [guestAuthMode, setGuestAuthMode] = useState<'login' | 'register'>('login');
 
   // Inline login state
   const [inlineEmail, setInlineEmail] = useState<string>('');
@@ -202,7 +202,7 @@ const Checkout: React.FC = () => {
       }
 
       // Success: close inline login form and reset mode
-      setGuestAuthMode('guest');
+      setGuestAuthMode('login');
       setInlinePassword('');
       setLoginError(null);
       setIsLoggingIn(false);
@@ -323,15 +323,15 @@ const Checkout: React.FC = () => {
         }
 
         // Close registration interface and display success message
-        setGuestAuthMode('guest');
+        setGuestAuthMode('login');
         setRegisterNotice({
           type: 'success',
           message: 'Your Promptila account has been created. You can now complete your purchase.',
         });
       } else {
         // New user returned but no session (email confirmation required by Supabase settings)
-        // Keep customer in checkout, keep fields intact, allow guest checkout to proceed
-        setGuestAuthMode('guest');
+        // Keep customer in checkout until email confirmation and sign-in
+        setGuestAuthMode('login');
         setRegisterNotice({
           type: 'info',
           message: 'Your account was created. Check your email if confirmation is required. Please confirm your email and sign in before payment.',
@@ -1164,7 +1164,7 @@ const Checkout: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section 1 Auth Header: Signed-in Status OR Guest / Sign In / Create Account Selector */}
+                {/* Section 1 Auth Header: Signed-in Status OR Sign In / Create Account Selector */}
                 {user ? (
                   <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-slate-700">
                     <div className="flex items-center space-x-2">
@@ -1185,21 +1185,6 @@ const Checkout: React.FC = () => {
                   <div className="mb-6 pb-4 border-b border-slate-100">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center space-x-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGuestAuthMode('guest');
-                            setLoginError(null);
-                            setRegisterError(null);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                            guestAuthMode === 'guest'
-                              ? 'bg-white text-slate-900 shadow-sm font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Continue as Guest
-                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -1235,12 +1220,6 @@ const Checkout: React.FC = () => {
                           Create Account
                         </button>
                       </div>
-
-                      {guestAuthMode === 'guest' && (
-                        <span className="text-xs text-slate-400 hidden sm:inline">
-                          Default • No password required
-                        </span>
-                      )}
                     </div>
                   </div>
                 )}
@@ -1274,7 +1253,7 @@ const Checkout: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setGuestAuthMode('guest');
+                          setGuestAuthMode('login');
                           setLoginError(null);
                         }}
                         className="text-xs text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
@@ -1361,7 +1340,7 @@ const Checkout: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            setGuestAuthMode('guest');
+                            setGuestAuthMode('login');
                             setLoginError(null);
                           }}
                           className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
@@ -1604,7 +1583,7 @@ const Checkout: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            setGuestAuthMode('guest');
+                            setGuestAuthMode('login');
                             setRegisterError(null);
                             setRegisterPassword('');
                             setConfirmPassword('');
