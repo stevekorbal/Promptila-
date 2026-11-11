@@ -6,7 +6,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = /^Bearer (.+)$/i.exec(req.headers.authorization || '')?.[1];
   if (!token) return res.status(401).json({ error: 'Sign in to find your free audit.' });
-  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\\/rest\\/v1\\/?$/, '').replace(/\\/$/, '');
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').split('/rest/v1')[0].replace(/\/$/, '');
   const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return res.status(503).json({ error: 'Audit lookup is unavailable.' });
   const db = createClient(url, key, {
