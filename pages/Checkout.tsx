@@ -709,7 +709,7 @@ const Checkout: React.FC = () => {
     }
 
     // Do not initialize until all required customer and business details are completed
-    if (!isDetailsComplete || !user) {
+    if (!isDetailsComplete) {
       return;
     }
 
@@ -742,12 +742,12 @@ const Checkout: React.FC = () => {
       try {
         const sessionResult = await getSupabaseClient()?.auth.getSession();
         const accessToken = sessionResult?.data.session?.access_token;
-        if (!accessToken) throw new Error('Please sign in before payment.');
+        // Guest checkout does not require an account.
         const response = await fetch('/api/create-payment-intent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
           body: JSON.stringify(currentPayload),
         });
@@ -789,7 +789,6 @@ const Checkout: React.FC = () => {
     selectedPlan.id,
     auditId,
     isDetailsComplete,
-    user,
     formData.email,
     formData.firstName,
     formData.lastName,
@@ -846,17 +845,14 @@ const Checkout: React.FC = () => {
     }
     setAuditLookupLoading(true);
     try {
-      const session = await getSupabaseClient()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      if (!token) throw new Error('Sign in with the email used for your free audit first.');
-      const response = await fetch('/api/checkout-audits', {
+      const response = await fetch('/api/guest-checkout-audits', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
-      const matches = Array.isArray(result.audits) ? result.audits : [];
+      const matches = Array.isArray(result.matches) ? result.matches : [];
       setAuditMatches(matches);
       setAuditLookupEmail(email);
       setAuditLookupDone(true);
@@ -872,7 +868,7 @@ const Checkout: React.FC = () => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
+    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -895,11 +891,6 @@ const Checkout: React.FC = () => {
       setSubmissionError(
         `Instant card checkout is currently active for the DIY Blueprint ($299). Please select the DIY Blueprint to complete payment online, or contact us regarding ${selectedPlan.name}.`
       );
-      return;
-    }
-
-    if (!user) {
-      setSubmissionError('Please sign in or create an account before paying.');
       return;
     }
 
@@ -929,12 +920,12 @@ const Checkout: React.FC = () => {
         try {
           const sessionResult = await getSupabaseClient()?.auth.getSession();
           const accessToken = sessionResult?.data.session?.access_token;
-          if (!accessToken) throw new Error('Please sign in before payment.');
+          // Guest checkout does not require an account.
           const updateResponse = await fetch('/api/create-payment-intent', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             },
             body: JSON.stringify({
               payment_intent_id: paymentIntentId,
@@ -1097,7 +1088,6 @@ const Checkout: React.FC = () => {
     !isProcessing &&
     !isInitializingPayment &&
     isDetailsComplete &&
-    Boolean(user) &&
     (selectedPlan.id !== 'diy' || (Boolean(stripePromise) && Boolean(clientSecret)));
 
   return (
@@ -1747,9 +1737,9 @@ const Checkout: React.FC = () => {
                         <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
                         {!user ? (
                           <>
-                            <p className="text-sm font-semibold text-rose-700">Sign in or create an account to continue</p>
+                            <p className="text-sm font-semibold text-rose-700">Find your free audit to continue</p>
                             <p className="text-xs text-slate-600 mt-1">
-                              Guest checkout is not available. Sign in above, or select Create Account if you do not have one. The payment form will appear after sign-in and verification.
+                              Enter the email used for your free audit to find your business and continue as a guest.
                             </p>
                             <button type="button" onClick={() => { setGuestAuthMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
