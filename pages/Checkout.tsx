@@ -1058,7 +1058,7 @@ const Checkout: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              {confirmedPaymentId && <Link to={\`/checkout/account-setup?payment_intent=\${encodeURIComponent(confirmedPaymentId)}\`} className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl">Set up your account (optional)</Link>}
+              {confirmedPaymentId && <Link to={`/checkout/account-setup?payment_intent=${encodeURIComponent(confirmedPaymentId)}`} className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl">Set up your account (optional)</Link>}
               <Link
                 to="/"
                 className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md active:scale-95"
