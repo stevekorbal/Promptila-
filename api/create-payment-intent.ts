@@ -93,7 +93,7 @@ export default async function handler(
     if (metadata.service !== 'diy') {
       return res.status(400).json({ error: 'Only the DIY Blueprint is available for instant checkout.' });
     }
-    if (!metadata.customer_email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(metadata.customer_email)) {
+    if (!metadata.customer_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(metadata.customer_email)) {
       return res.status(400).json({ error: 'Enter a valid email address.' });
     }
     if (!metadata.audit_id) return res.status(400).json({ error: 'Select a completed free audit.' });
