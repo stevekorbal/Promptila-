@@ -852,7 +852,17 @@ const Checkout: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const result = await response.json();
+      const responseText = await response.text();
+      let result: any;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          response.ok
+            ? 'The audit lookup returned an unexpected response. Please try again.'
+            : 'The audit lookup service is unavailable (HTTP ' + response.status + '). Please try again shortly.'
+        );
+      }
       if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
       const matches = Array.isArray(result.matches) ? result.matches : [];
       setAuditMatches(matches);
