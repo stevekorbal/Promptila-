@@ -634,6 +634,7 @@ const Checkout: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [confirmedPaymentId, setConfirmedPaymentId] = useState('');
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -811,6 +812,7 @@ const Checkout: React.FC = () => {
           if (paymentIntent && paymentIntent.status === 'succeeded') {
             const confirmedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
             setOrderId(confirmedId);
+            setConfirmedPaymentId(paymentIntent.id);
             setIsSuccess(true);
           }
         } catch (err) {
@@ -983,6 +985,7 @@ const Checkout: React.FC = () => {
         }
 
         setOrderId(generatedId);
+        setConfirmedPaymentId(paymentIntent.id);
         setIsProcessing(false);
         setIsSuccess(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1014,7 +1017,7 @@ const Checkout: React.FC = () => {
               Thank You, {formData.firstName || 'Partner'}!
             </h1>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">
-              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. Our AI search specialists are preparing your kickoff dossier.
+              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. We are preparing your Blueprint from your completed free audit.
             </p>
 
             {/* Order Confirmation Card */}
@@ -1051,20 +1054,11 @@ const Checkout: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-indigo-600" />
                 <span>What Happens Next?</span>
               </h3>
-              <ol className="space-y-3 text-sm text-slate-700 list-decimal list-inside">
-                <li>
-                  <strong className="text-slate-900">Check your inbox:</strong> A receipt and onboarding instructions have been sent to <strong>{formData.email || 'your email'}</strong>.
-                </li>
-                <li>
-                  <strong className="text-slate-900">Dedicated Analyst Assignment:</strong> A Promptila AI search engineer is assigned to audit your domain <em>{formData.website ? `(${formData.website})` : ''}</em>.
-                </li>
-                <li>
-                  <strong className="text-slate-900">Fast Turnaround:</strong> You will receive initial credentials and recommendations within 24–48 business hours.
-                </li>
-              </ol>
+              <p className="text-sm text-slate-700">Your Blueprint will be delivered by email to the address associated with your free audit. You can also set up a Promptila account now or later.</p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              {confirmedPaymentId && <Link to={\`/checkout/account-setup?payment_intent=\${encodeURIComponent(confirmedPaymentId)}\`} className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl">Set up your account (optional)</Link>}
               <Link
                 to="/"
                 className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md active:scale-95"
