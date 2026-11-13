@@ -1148,193 +1148,8 @@ const Checkout: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section 1 Auth Header: Signed-in Status OR Sign In / Create Account Selector */}
-                {user ? (
-                  <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-slate-700">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
-                      <span>
-                        Signed in as: <strong className="text-slate-900">{user.email || profile?.email}</strong>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSwitchAccount}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline transition-colors cursor-pointer"
-                    >
-                      Switch account
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mb-6 pb-4 border-b border-slate-100">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center space-x-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGuestAuthMode('login');
-                            setInlineEmail(formData.email || '');
-                            setInlinePassword('');
-                            setLoginError(null);
-                            setRegisterError(null);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                            guestAuthMode === 'login'
-                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
-                              : 'text-slate-600 hover:text-indigo-600'
-                          }`}
-                        >
-                          Sign In
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGuestAuthMode('register');
-                            setRegisterPassword('');
-                            setConfirmPassword('');
-                            setRegisterError(null);
-                            setLoginError(null);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                            guestAuthMode === 'register'
-                              ? 'bg-white text-indigo-600 shadow-sm font-bold'
-                              : 'text-slate-600 hover:text-indigo-600'
-                          }`}
-                        >
-                          Create Account
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Registration Notification Banner */}
-                {registerNotice && (
-                  <div
-                    className={`mb-6 p-3.5 rounded-xl border flex items-start space-x-2.5 text-xs sm:text-sm font-medium animate-in fade-in ${
-                      registerNotice.type === 'success'
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                        : 'bg-blue-50 border-blue-200 text-blue-900'
-                    }`}
-                  >
-                    {registerNotice.type === 'success' ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                    )}
-                    <span>{registerNotice.message}</span>
-                  </div>
-                )}
-
-                {/* Inline Login Box (when Sign In option is selected) */}
-                {!user && guestAuthMode === 'login' && (
-                  <div className="mb-6 p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200">
-                      <div className="flex items-center space-x-2">
-                        <Lock className="w-4 h-4 text-indigo-600" />
-                        <span className="text-xs sm:text-sm font-bold text-slate-900">Sign in to your Promptila account</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGuestAuthMode('login');
-                          setLoginError(null);
-                        }}
-                        className="text-xs text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-
-                    {loginError && (
-                      <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-2 text-xs text-rose-800">
-                        <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                        <span>{loginError}</span>
-                      </div>
-                    )}
-
-                    <div className="space-y-3.5">
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                          Email Address
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                            <Mail className="w-3.5 h-3.5" />
-                          </div>
-                          <input
-                            type="email"
-                            value={inlineEmail}
-                            onChange={(e) => setInlineEmail(e.target.value)}
-                            placeholder="name@company.com"
-                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                            Password
-                          </label>
-                          <Link
-                            to={`/forgot-password?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
-                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
-                          >
-                            Forgot password?
-                          </Link>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                            <Lock className="w-3.5 h-3.5" />
-                          </div>
-                          <input
-                            type="password"
-                            value={inlinePassword}
-                            onChange={(e) => setInlinePassword(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleInlineLogin();
-                              }
-                            }}
-                            placeholder="••••••••"
-                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="pt-1 flex items-center space-x-3">
-                        <button
-                          type="button"
-                          disabled={isLoggingIn}
-                          onClick={() => handleInlineLogin()}
-                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-60 flex items-center space-x-1.5 cursor-pointer"
-                        >
-                          {isLoggingIn ? (
-                            <>
-                              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                              <span>Signing In...</span>
-                            </>
-                          ) : (
-                            <span>Sign In</span>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGuestAuthMode('login');
-                            setLoginError(null);
-                          }}
-                          className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* Guest checkout: no sign-in or account registration required. */}
+                <p className="mb-6 text-sm text-slate-600">Enter the email used for your completed free audit. Your business details will fill in automatically after you select the audit.</p>
 
                 {hasAutoPopulatedNotice && (
                   <div className="mb-6 p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center space-x-2.5 text-xs sm:text-sm text-indigo-900 font-medium">
@@ -1415,7 +1230,7 @@ const Checkout: React.FC = () => {
                         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                         {auditLookupLoading ? 'Checking…' : 'Find my free audit'}
                       </button>
-                      {!user && <p className="text-xs text-amber-700">Please sign in or create an account first.</p>}
+
                       {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
                       {auditLookupDone && auditMatches.length === 0 && (
                         <p className="text-xs text-slate-700">No completed free audit was found for this email. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
@@ -1735,7 +1550,7 @@ const Checkout: React.FC = () => {
                             <p className="text-xs text-slate-600 mt-1">
                               Enter the email used for your free audit to find your business and continue as a guest.
                             </p>
-                            <button type="button" onClick={() => { setGuestAuthMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            <button type="button" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
                               Find audit using email above
                             </button>
