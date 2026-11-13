@@ -1416,8 +1416,8 @@ const Checkout: React.FC = () => {
                   {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
                     <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
                       <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
-                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. Sign in with that same verified email.</p>
-                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading || !user}
+                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. No account is required to pay.</p>
+                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading}
                         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                         {auditLookupLoading ? 'Checking…' : 'Find my free audit'}
                       </button>
@@ -1735,7 +1735,7 @@ const Checkout: React.FC = () => {
                     ) : (
                       <div className="py-8 px-4 text-center bg-slate-50 rounded-xl border border-slate-200/80">
                         <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                        {!user ? (
+                        {selectedPlan.id === 'diy' && !auditId ? (
                           <>
                             <p className="text-sm font-semibold text-rose-700">Find your free audit to continue</p>
                             <p className="text-xs text-slate-600 mt-1">
@@ -1743,7 +1743,7 @@ const Checkout: React.FC = () => {
                             </p>
                             <button type="button" onClick={() => { setGuestAuthMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
-                              Go to Sign In / Create Account
+                              Find audit using email above
                             </button>
                           </>
                         ) : selectedPlan.id === 'diy' && !auditId ? (
