@@ -45,6 +45,8 @@ const Dashboard: React.FC = () => {
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [linkedBlueprintOrders, setLinkedBlueprintOrders] = useState<Array<{ id: string; audit_id: string; business_name: string; amount_paid: number; currency: string; status: string; delivery_status: string; created_at: string }>>([]);
+  const [linkError, setLinkError] = useState('');
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -113,6 +115,23 @@ const Dashboard: React.FC = () => {
     }
 
     try {
+      // Link purchases made before account registration using a confirmed email.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.access_token) {
+        try {
+          const response = await fetch('/api/link-previous-purchases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session.access_token}` },
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Purchase linking failed.');
+          setLinkedBlueprintOrders(result.blueprint_orders || []);
+          setLinkError('');
+        } catch (error: any) {
+          setLinkError(error?.message || 'Unable to load previous purchases.');
+        }
+      }
+
       // Query user data relying on Supabase RLS policies
       const [
         bizRes, 
@@ -644,7 +663,20 @@ const Dashboard: React.FC = () => {
               </p>
             </div>
 
-            {orders.length === 0 ? (
+            {linkError && <p className="text-sm text-amber-700">{linkError} Refresh this page to retry.</p>}
+            {linkedBlueprintOrders.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <h3 className="font-bold text-slate-900">DIY Blueprint Purchases</h3>
+                {linkedBlueprintOrders.map(order => (
+                  <div key={order.id} className="border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <div><p className="font-semibold text-slate-900">{order.business_name || 'DIY Blueprint'}</p><p className="text-slate-500">Audit {order.audit_id} · {new Date(order.created_at).toLocaleDateString()}</p></div>
+                    <div className="text-right"><p className="font-bold">{(Number(order.amount_paid || 0) / 100).toLocaleString('en-US', { style: 'currency', currency: order.currency || 'USD' })}</p><p className="text-slate-500">{order.delivery_status || order.status || 'Processing'}</p></div>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">Your Blueprint is delivered by email to the address used for your audit.</p>
+              </div>
+            )}
+            {orders.length === 0 && linkedBlueprintOrders.length === 0 ? (
               <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center">
                 <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <ShoppingBag className="w-8 h-8" />
