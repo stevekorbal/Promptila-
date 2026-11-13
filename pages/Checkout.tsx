@@ -876,11 +876,17 @@ const Checkout: React.FC = () => {
     }
   };
 
+  const normalizeWebsiteUrl = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
   const selectCheckoutAudit = (audit: { audit_id: string; business_name: string; website: string | null }) => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
+    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1441,6 +1447,7 @@ const Checkout: React.FC = () => {
                         required
                         value={formData.website}
                         onChange={handleInputChange}
+                        onBlur={() => setFormData(prev => ({ ...prev, website: normalizeWebsiteUrl(prev.website) }))}
                         placeholder="https://acmelegal.com"
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                       />
