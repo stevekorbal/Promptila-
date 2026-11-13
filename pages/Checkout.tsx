@@ -1745,10 +1745,46 @@ const Checkout: React.FC = () => {
                     ) : (
                       <div className="py-8 px-4 text-center bg-slate-50 rounded-xl border border-slate-200/80">
                         <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                        <p className="text-sm font-semibold text-slate-700">Enter Contact & Business Details</p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Complete the required customer and business information above to load the secure payment form.
-                        </p>
+                        {!user ? (
+                          <>
+                            <p className="text-sm font-semibold text-rose-700">Sign in or create an account to continue</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                              Guest checkout is not available. Sign in above, or select Create Account if you do not have one. The payment form will appear after sign-in and verification.
+                            </p>
+                            <button type="button" onClick={() => { setGuestAuthMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                              className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
+                              Go to Sign In / Create Account
+                            </button>
+                          </>
+                        ) : selectedPlan.id === 'diy' && !auditId ? (
+                          <>
+                            <p className="text-sm font-semibold text-rose-700">Free audit not selected</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                              Find and select your completed free audit above before payment. If no audit is found, complete a free audit first.
+                            </p>
+                          </>
+                        ) : !isDetailsComplete ? (
+                          <>
+                            <p className="text-sm font-semibold text-rose-700">Complete the missing checkout details</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                              Required: {[
+                                !formData.firstName.trim() && 'First name',
+                                !formData.lastName.trim() && 'Last name',
+                                !isValidEmail(formData.email) && 'Valid email',
+                                !formData.phone.trim() && 'Phone number',
+                                !formData.businessName.trim() && 'Business name',
+                                !formData.website.trim() && 'Website URL',
+                                !formData.city.trim() && 'City',
+                                !formData.state.trim() && 'State / region',
+                              ].filter(Boolean).join(', ')}.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-slate-700">Preparing secure payment</p>
+                            <p className="text-xs text-slate-500 mt-1">Please wait while the payment form loads.</p>
+                          </>
+                        )}
                       </div>
                     )
                   ) : (
