@@ -22,6 +22,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy.tsx';
 import TermsOfService from './pages/TermsOfService.tsx';
 import CookiePolicy from './pages/CookiePolicy.tsx';
 import Checkout from './pages/Checkout.tsx';
+import PostPaymentAccount from './pages/PostPaymentAccount.tsx';
 import Login from './pages/Login.tsx';
 import SignUp from './pages/SignUp.tsx';
 import ForgotPassword from './pages/ForgotPassword.tsx';
@@ -103,6 +104,7 @@ const App: React.FC = () => {
             <Route path="/case-study/big-lake-candy" element={<CaseStudyBigLake />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/checkout/account-setup" element={<PostPaymentAccount />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

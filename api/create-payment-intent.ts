@@ -70,21 +70,10 @@ export default async function handler(
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const bearer = req.headers.authorization || '';
-  const token = /^Bearer (.+)$/i.exec(bearer)?.[1];
-  if (!token) return res.status(401).json({ error: 'Sign in before checkout.' });
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-  const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: 'Checkout authentication is not configured.' });
-  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !authData.user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
-  const authenticatedUserId = authData.user.id;
-  // Use the caller's JWT for RLS-protected audit ownership queries.
-  const userSupabase = createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return res.status(503).json({ error: 'Checkout audit verification is not configured.' });
+  const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -101,44 +90,29 @@ export default async function handler(
     if (metadata.service === 'diy' && !metadata.audit_id) {
       return res.status(400).json({ error: 'Find and select your completed free audit before paying.' });
     }
-    if (metadata.service === 'diy' && (
-      !authData.user.email_confirmed_at ||
-      metadata.customer_email !== String(authData.user.email || '').trim().toLowerCase()
-    )) {
-      return res.status(403).json({ error: 'Use your verified account email, the same one used for the free audit.' });
+    if (metadata.service !== 'diy') {
+      return res.status(400).json({ error: 'Only the DIY Blueprint is available for instant checkout.' });
     }
-    // A supplied audit must be owned by the authenticated payer. This is checked
-    // server-side on both PaymentIntent creation and metadata updates.
-    const suppliedAuditId = body.audit_id ?? body.auditId;
-    if (suppliedAuditId && !metadata.audit_id) {
-      return res.status(400).json({ error: 'Invalid audit ID.' });
+    if (!metadata.customer_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(metadata.customer_email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
     }
-    if (metadata.audit_id) {
-      // Guest free audits have no user_id. A verified-email account can safely
-      // claim its matching audit and request before the ownership check.
-      const { error: claimError } = await userSupabase.rpc('claim_own_audit_for_checkout', {
-        p_audit_id: metadata.audit_id,
-      });
-      if (claimError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
-      const { data: ownedAudit, error: auditError } = await userSupabase
-        .from('audits')
-        .select('id, overall_score, status, needs_review, contact_email')
-        .eq('audit_id', metadata.audit_id)
-        .eq('user_id', authenticatedUserId)
-        .maybeSingle();
-      if (auditError) return res.status(503).json({ error: 'Unable to verify audit ownership.' });
-      if (!ownedAudit) return res.status(403).json({ error: 'This audit does not belong to your account.' });
-      if (metadata.service === 'diy' && (
-        ownedAudit.overall_score === null ||
-        !['free_audit_sent', 'completed'].includes(ownedAudit.status) ||
-        ownedAudit.needs_review ||
-        String(ownedAudit.contact_email || '').trim().toLowerCase() !== metadata.customer_email
-      )) {
-        return res.status(403).json({ error: 'This free audit is not eligible for Blueprint checkout.' });
-      }
+    if (!metadata.audit_id) return res.status(400).json({ error: 'Select a completed free audit.' });
+    const { data: ownedAudit, error: auditError } = await db.from('audits')
+      .select('audit_id,contact_email,overall_score,status,needs_review,business_name,website')
+      .eq('audit_id', metadata.audit_id).maybeSingle();
+    if (auditError) return res.status(503).json({ error: 'Unable to verify free audit.' });
+    if (!ownedAudit || String(ownedAudit.contact_email || '').trim().toLowerCase() !== metadata.customer_email ||
+      ownedAudit.overall_score === null || ownedAudit.needs_review !== false ||
+      !['free_audit_sent', 'completed'].includes(ownedAudit.status)) {
+      return res.status(403).json({ error: 'No eligible completed free audit matches this email and audit.' });
     }
+    // Never trust client-supplied business identity for fulfillment.
+    const securedMetadata = {
+      ...metadata,
+      business_name: String(ownedAudit.business_name || '').slice(0, 200),
+      website: String(ownedAudit.website || '').slice(0, 200),
+    };
     const customerEmail = metadata.customer_email;
-    const securedMetadata = { ...metadata, user_id: authenticatedUserId };
 
     // Check if updating an existing PaymentIntent right before confirmation
     const intentIdToUpdate = body.payment_intent_id || body.paymentIntentId;
@@ -152,7 +126,12 @@ export default async function handler(
       }
 
       const existingIntent = await stripe.paymentIntents.retrieve(intentIdToUpdate);
-      if (existingIntent.metadata?.user_id !== authenticatedUserId) return res.status(403).json({ error: 'Payment session does not belong to this account.' });
+      if (existingIntent.metadata?.audit_id !== metadata.audit_id ||
+          existingIntent.metadata?.customer_email !== customerEmail ||
+          existingIntent.metadata?.service !== 'diy' ||
+          existingIntent.amount !== 29900 || existingIntent.currency !== 'usd') {
+        return res.status(403).json({ error: 'Payment session does not match the selected audit.' });
+      }
       if (existingIntent.status !== 'requires_payment_method' && existingIntent.status !== 'requires_confirmation') return res.status(409).json({ error: 'Payment session can no longer be edited.' });
       const updatedIntent = await stripe.paymentIntents.update(intentIdToUpdate, updateParams);
 
@@ -165,7 +144,7 @@ export default async function handler(
 
     // Otherwise, create a new PaymentIntent
     // Never take amount from the browser. DIY stays 29900, DFY stays 99900.
-    const amount = metadata.service === 'dfy' ? 99900 : 29900;
+    const amount = 29900;
 
     const createParams: Stripe.PaymentIntentCreateParams = {
       amount,

@@ -634,6 +634,7 @@ const Checkout: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [confirmedPaymentId, setConfirmedPaymentId] = useState('');
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -709,7 +710,7 @@ const Checkout: React.FC = () => {
     }
 
     // Do not initialize until all required customer and business details are completed
-    if (!isDetailsComplete || !user) {
+    if (!isDetailsComplete) {
       return;
     }
 
@@ -742,12 +743,12 @@ const Checkout: React.FC = () => {
       try {
         const sessionResult = await getSupabaseClient()?.auth.getSession();
         const accessToken = sessionResult?.data.session?.access_token;
-        if (!accessToken) throw new Error('Please sign in before payment.');
+        // Guest checkout does not require an account.
         const response = await fetch('/api/create-payment-intent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
           body: JSON.stringify(currentPayload),
         });
@@ -789,7 +790,6 @@ const Checkout: React.FC = () => {
     selectedPlan.id,
     auditId,
     isDetailsComplete,
-    user,
     formData.email,
     formData.firstName,
     formData.lastName,
@@ -812,6 +812,7 @@ const Checkout: React.FC = () => {
           if (paymentIntent && paymentIntent.status === 'succeeded') {
             const confirmedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
             setOrderId(confirmedId);
+            setConfirmedPaymentId(paymentIntent.id);
             setIsSuccess(true);
           }
         } catch (err) {
@@ -846,17 +847,14 @@ const Checkout: React.FC = () => {
     }
     setAuditLookupLoading(true);
     try {
-      const session = await getSupabaseClient()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      if (!token) throw new Error('Sign in with the email used for your free audit first.');
-      const response = await fetch('/api/checkout-audits', {
+      const response = await fetch('/api/guest-checkout-audits', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
-      const matches = Array.isArray(result.audits) ? result.audits : [];
+      const matches = Array.isArray(result.matches) ? result.matches : [];
       setAuditMatches(matches);
       setAuditLookupEmail(email);
       setAuditLookupDone(true);
@@ -872,7 +870,7 @@ const Checkout: React.FC = () => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
+    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: audit.website || prev.website }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -895,11 +893,6 @@ const Checkout: React.FC = () => {
       setSubmissionError(
         `Instant card checkout is currently active for the DIY Blueprint ($299). Please select the DIY Blueprint to complete payment online, or contact us regarding ${selectedPlan.name}.`
       );
-      return;
-    }
-
-    if (!user) {
-      setSubmissionError('Please sign in or create an account before paying.');
       return;
     }
 
@@ -929,12 +922,12 @@ const Checkout: React.FC = () => {
         try {
           const sessionResult = await getSupabaseClient()?.auth.getSession();
           const accessToken = sessionResult?.data.session?.access_token;
-          if (!accessToken) throw new Error('Please sign in before payment.');
+          // Guest checkout does not require an account.
           const updateResponse = await fetch('/api/create-payment-intent', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             },
             body: JSON.stringify({
               payment_intent_id: paymentIntentId,
@@ -992,6 +985,7 @@ const Checkout: React.FC = () => {
         }
 
         setOrderId(generatedId);
+        setConfirmedPaymentId(paymentIntent.id);
         setIsProcessing(false);
         setIsSuccess(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1023,7 +1017,7 @@ const Checkout: React.FC = () => {
               Thank You, {formData.firstName || 'Partner'}!
             </h1>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">
-              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. Our AI search specialists are preparing your kickoff dossier.
+              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. We are preparing your Blueprint from your completed free audit.
             </p>
 
             {/* Order Confirmation Card */}
@@ -1060,20 +1054,11 @@ const Checkout: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-indigo-600" />
                 <span>What Happens Next?</span>
               </h3>
-              <ol className="space-y-3 text-sm text-slate-700 list-decimal list-inside">
-                <li>
-                  <strong className="text-slate-900">Check your inbox:</strong> A receipt and onboarding instructions have been sent to <strong>{formData.email || 'your email'}</strong>.
-                </li>
-                <li>
-                  <strong className="text-slate-900">Dedicated Analyst Assignment:</strong> A Promptila AI search engineer is assigned to audit your domain <em>{formData.website ? `(${formData.website})` : ''}</em>.
-                </li>
-                <li>
-                  <strong className="text-slate-900">Fast Turnaround:</strong> You will receive initial credentials and recommendations within 24–48 business hours.
-                </li>
-              </ol>
+              <p className="text-sm text-slate-700">Your Blueprint will be delivered by email to the address associated with your free audit. You can also set up a Promptila account now or later.</p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              {confirmedPaymentId && <Link to={\`/checkout/account-setup?payment_intent=\${encodeURIComponent(confirmedPaymentId)}\`} className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl">Set up your account (optional)</Link>}
               <Link
                 to="/"
                 className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md active:scale-95"
@@ -1097,7 +1082,6 @@ const Checkout: React.FC = () => {
     !isProcessing &&
     !isInitializingPayment &&
     isDetailsComplete &&
-    Boolean(user) &&
     (selectedPlan.id !== 'diy' || (Boolean(stripePromise) && Boolean(clientSecret)));
 
   return (
@@ -1426,8 +1410,8 @@ const Checkout: React.FC = () => {
                   {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
                     <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
                       <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
-                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. Sign in with that same verified email.</p>
-                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading || !user}
+                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. No account is required to pay.</p>
+                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading}
                         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                         {auditLookupLoading ? 'Checking…' : 'Find my free audit'}
                       </button>
@@ -1745,15 +1729,15 @@ const Checkout: React.FC = () => {
                     ) : (
                       <div className="py-8 px-4 text-center bg-slate-50 rounded-xl border border-slate-200/80">
                         <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                        {!user ? (
+                        {selectedPlan.id === 'diy' && !auditId ? (
                           <>
-                            <p className="text-sm font-semibold text-rose-700">Sign in or create an account to continue</p>
+                            <p className="text-sm font-semibold text-rose-700">Find your free audit to continue</p>
                             <p className="text-xs text-slate-600 mt-1">
-                              Guest checkout is not available. Sign in above, or select Create Account if you do not have one. The payment form will appear after sign-in and verification.
+                              Enter the email used for your free audit to find your business and continue as a guest.
                             </p>
                             <button type="button" onClick={() => { setGuestAuthMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
-                              Go to Sign In / Create Account
+                              Find audit using email above
                             </button>
                           </>
                         ) : selectedPlan.id === 'diy' && !auditId ? (
