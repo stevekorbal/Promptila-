@@ -1116,16 +1116,16 @@ const Checkout: React.FC = () => {
 
         <div className="text-left mb-10">
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Complete Your Optimization Order
+            Get Your AI Visibility Blueprint
           </h1>
           <p className="mt-2 text-base text-slate-600 max-w-3xl">
-            Secure your spot in the AI recommendation era. Fill in your business details below to initiate your onboarding.
+            Your Blueprint is built from your free audit. Confirm your details below to order.
           </p>
         </div>
 
         {/* Plan Switcher Pills */}
         <div className="mb-10 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm inline-flex flex-wrap gap-2 max-w-full">
-          {(Object.keys(SERVICE_PLANS) as ServicePlanId[]).map((planId) => {
+          {(Object.keys(SERVICE_PLANS) as ServicePlanId[]).filter((planId) => planId !== 'monitoring').map((planId) => {
             const plan = SERVICE_PLANS[planId];
             const isSelected = selectedPlan.id === planId;
             return (
@@ -1139,7 +1139,7 @@ const Checkout: React.FC = () => {
                     : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                <span>{plan.name}</span>
+                <span>{planId === 'diy' ? 'AI Visibility Blueprint' : 'Done-For-You Optimization'}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
                   {plan.formattedPrice}{plan.billingInterval || ''}
                 </span>
@@ -1159,13 +1159,13 @@ const Checkout: React.FC = () => {
                     1
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Customer & Business Details</h2>
-                    <p className="text-xs text-slate-500">Provide details for your AI visibility footprint</p>
+                    <h2 className="text-lg font-bold text-slate-900">Your details</h2>
+                    <p className="text-xs text-slate-500">We've filled in your business from your free audit.</p>
                   </div>
                 </div>
 
                 {/* Guest checkout: no sign-in or account registration required. */}
-                <p className="mb-6 text-sm text-slate-600">Enter the email used for your completed free audit. Your business details will fill in automatically after you select the audit.</p>
+                <p className="mb-6 text-sm text-slate-600">Enter your own contact details below.</p>
 
                 {hasAutoPopulatedNotice && (
                   <div className="mb-6 p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center space-x-2.5 text-xs sm:text-sm text-indigo-900 font-medium">
@@ -1673,7 +1673,7 @@ const Checkout: React.FC = () => {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Selected Service</span>
-                    <h4 className="text-lg font-bold text-slate-900">{selectedPlan.name}</h4>
+                    <h4 className="text-lg font-bold text-slate-900">{selectedPlan.id === 'diy' ? 'AI Visibility Blueprint' : selectedPlan.name}</h4>
                   </div>
                   <div className="text-right">
                     <span className="text-xl font-extrabold text-slate-900">{selectedPlan.formattedPrice}</span>
@@ -1684,12 +1684,12 @@ const Checkout: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  {selectedPlan.description}
+                  {selectedPlan.id === 'diy' ? 'A personalized, step-by-step plan built from your free audit.' : selectedPlan.description}
                 </p>
 
                 {/* Plan Highlights */}
                 <ul className="space-y-2 pt-3 border-t border-slate-200/60">
-                  {selectedPlan.features.slice(0, 4).map((item, idx) => (
+                  {(selectedPlan.id === 'diy' ? ['Every fix we found, in plain step-by-step instructions', 'Ordered by how many points each fix adds', "The score you could reach when they're done"] : selectedPlan.features.slice(0, 4)).map((item, idx) => (
                     <li key={idx} className="flex items-start text-xs text-slate-700">
                       <Check className="w-3.5 h-3.5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
                       <span>{item}</span>
@@ -1708,7 +1708,7 @@ const Checkout: React.FC = () => {
                 <div className="flex justify-between text-slate-600">
                   <span>Billing Cadence</span>
                   <span className="font-medium text-slate-700 capitalize">
-                    {selectedPlan.billingType === 'recurring' ? 'Recurring Monthly' : 'One-time investment'}
+                    {selectedPlan.billingType === 'recurring' ? 'Recurring Monthly' : 'One-time payment'}
                   </span>
                 </div>
 
@@ -1718,7 +1718,7 @@ const Checkout: React.FC = () => {
                 </div>
               </div>
 
-              {/* Total Due Today */}
+              {/* Total due today */}
               <div className="pt-5 pb-6">
                 <div className="flex justify-between items-baseline mb-2">
                   <span className="text-base font-bold text-slate-900">Total Due Today</span>
@@ -1739,7 +1739,7 @@ const Checkout: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 mt-1">
-                    One-time payment. Lifetime access to blueprint & deliverable assets.
+                    One-time payment. Your Blueprint is emailed to the address that received your free report.
                   </p>
                 )}
               </div>
@@ -1765,18 +1765,12 @@ const Checkout: React.FC = () => {
 
               {/* Security Badges */}
               <div className="mt-6 pt-6 border-t border-slate-100 space-y-3 text-xs text-slate-500">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>Promptila 100% Satisfaction Guarantee</span>
-                </div>
+                
                 <div className="flex items-center space-x-2">
                   <Lock className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                   <span>256-Bit SSL Bank-Grade Encryption</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 ml-1 mr-1.5"></span>
-                  <span>Direct Specialist Onboarding within 24 Hours</span>
-                </div>
+                
               </div>
             </div>
           </div>
