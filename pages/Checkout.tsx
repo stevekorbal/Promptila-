@@ -1116,10 +1116,10 @@ const Checkout: React.FC = () => {
 
         <div className="text-left mb-10">
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Get Your AI Visibility Blueprint
+            {selectedPlan.id === 'diy' ? 'Get Your AI Visibility Blueprint' : 'Get Done-For-You Optimization'}
           </h1>
           <p className="mt-2 text-base text-slate-600 max-w-3xl">
-            Your Blueprint is built from your free audit. Confirm your details below to order.
+            {selectedPlan.id === 'diy' ? 'Your Blueprint is built from your free audit. Confirm your details below to order.' : 'Our team makes the improvements from your free audit. Call or book a call below to get started.'}
           </p>
         </div>
 
@@ -1152,7 +1152,8 @@ const Checkout: React.FC = () => {
           {/* Left Column: Checkout Forms (7 cols) */}
           <div className="lg:col-span-7 space-y-8">
             <form onSubmit={handleSubmit} id="checkout-form">
-              {/* Section 1: Business & Contact Information */}
+              {/* Section 1: Business & Contact Information — DIY only */}
+              {selectedPlan.id === 'diy' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm mb-8">
                 <div className="flex items-center space-x-3 mb-6 pb-4 border-b border-slate-100">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">
@@ -1160,7 +1161,7 @@ const Checkout: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Your details</h2>
-                    <p className="text-xs text-slate-500">We've filled in your business from your free audit.</p>
+                    <p className="text-xs text-slate-500">Enter your details below.</p>
                   </div>
                 </div>
 
@@ -1493,6 +1494,7 @@ const Checkout: React.FC = () => {
                 </div>
               </div>
 
+              )}
               {/* Section 2: Payment Information with Stripe Payment Element */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
@@ -1501,7 +1503,7 @@ const Checkout: React.FC = () => {
                       2
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-slate-900">Payment Information</h2>
+                      <h2 className="text-lg font-bold text-slate-900">{selectedPlan.id === 'diy' ? 'Payment Information' : 'Get Started'}</h2>
                       <p className="text-xs text-slate-500">256-bit bank-level encrypted transaction</p>
                     </div>
                   </div>
