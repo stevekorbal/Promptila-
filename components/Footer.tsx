@@ -15,7 +15,7 @@ const Footer: React.FC = () => {
               />
             </Link>
             <p className="mt-4 text-sm leading-relaxed max-w-xs">
-              Optimizing high-trust brands for the AI recommendation era. We ensure your business is the only logical answer.
+              Optimizing high-trust brands for the AI recommendation era. We show local businesses whether AI tools like ChatGPT recommend them, and help fix what's holding them back.
             </p>
           </div>
           <div>
