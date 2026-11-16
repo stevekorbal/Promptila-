@@ -1607,18 +1607,9 @@ const Checkout: React.FC = () => {
                     <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
                       <div className="flex items-center space-x-2 font-semibold text-slate-900 mb-2">
                         <Info className="w-4 h-4 text-indigo-600 flex-shrink-0" />
-                        <span>Online checkout for {selectedPlan.name} is in preparation</span>
+                        <span>Ready to get started?</span>
                       </div>
-                      <p className="text-slate-600 mb-3 text-xs leading-relaxed">
-                        Online Stripe credit card checkout is currently active for the DIY AI Visibility Blueprint ($299).
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => handleServiceChange('diy')}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline"
-                      >
-                        Switch to DIY AI Visibility Blueprint ($299)
-                      </button>
+                      <p className="text-slate-600 text-xs leading-relaxed">Call <a href="tel:2482168175" className="underline font-semibold">248-216-8175</a> or book a call at <a href="https://calendly.com/promptila/consult" target="_blank" rel="noopener noreferrer" className="underline font-semibold">calendly.com/promptila/consult</a> and we'll set you up.</p>
                     </div>
                   )}
 
@@ -1638,7 +1629,7 @@ const Checkout: React.FC = () => {
                 </div>
 
                 {/* Purchase Button for Mobile */}
-                <div className="mt-8 pt-6 border-t border-slate-100 lg:hidden">
+                {selectedPlan.id === 'diy' && <div className="mt-8 pt-6 border-t border-slate-100 lg:hidden">
                   <button
                     type="submit"
                     disabled={!isFormSubmittable}
@@ -1655,7 +1646,7 @@ const Checkout: React.FC = () => {
                       <span>Complete Order • {selectedPlan.formattedPrice}</span>
                     )}
                   </button>
-                </div>
+                </div>}
               </div>
             </form>
           </div>
@@ -1673,7 +1664,7 @@ const Checkout: React.FC = () => {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Selected Service</span>
-                    <h4 className="text-lg font-bold text-slate-900">{selectedPlan.id === 'diy' ? 'AI Visibility Blueprint' : selectedPlan.name}</h4>
+                    <h4 className="text-lg font-bold text-slate-900">{selectedPlan.id === 'diy' ? 'AI Visibility Blueprint' : 'Done-For-You Optimization'}</h4>
                   </div>
                   <div className="text-right">
                     <span className="text-xl font-extrabold text-slate-900">{selectedPlan.formattedPrice}</span>
@@ -1684,12 +1675,12 @@ const Checkout: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  {selectedPlan.id === 'diy' ? 'A personalized, step-by-step plan built from your free audit.' : selectedPlan.description}
+                  {selectedPlan.id === 'diy' ? 'A personalized, step-by-step plan built from your free audit.' : 'No time or technical know-how to fix these gaps? Our team makes the improvements for you.'}
                 </p>
 
                 {/* Plan Highlights */}
                 <ul className="space-y-2 pt-3 border-t border-slate-200/60">
-                  {(selectedPlan.id === 'diy' ? ['Every fix we found, in plain step-by-step instructions', 'Ordered by how many points each fix adds', "The score you could reach when they're done"] : selectedPlan.features.slice(0, 4)).map((item, idx) => (
+                  {(selectedPlan.id === 'diy' ? ['Every fix we found, in plain step-by-step instructions', 'Ordered by how many points each fix adds', "The score you could reach when they're done"] : ['We handle the agreed website and business-information improvements from your report, highest-impact first.', 'Nothing technical on your end. We collect the access we need, then do the work.', 'One-time payment. No Blueprint needed.']).map((item, idx) => (
                     <li key={idx} className="flex items-start text-xs text-slate-700">
                       <Check className="w-3.5 h-3.5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
                       <span>{item}</span>
@@ -1706,7 +1697,7 @@ const Checkout: React.FC = () => {
                 </div>
 
                 <div className="flex justify-between text-slate-600">
-                  <span>Billing Cadence</span>
+                  <span>Billing</span>
                   <span className="font-medium text-slate-700 capitalize">
                     {selectedPlan.billingType === 'recurring' ? 'Recurring Monthly' : 'One-time payment'}
                   </span>
@@ -1721,7 +1712,7 @@ const Checkout: React.FC = () => {
               {/* Total due today */}
               <div className="pt-5 pb-6">
                 <div className="flex justify-between items-baseline mb-2">
-                  <span className="text-base font-bold text-slate-900">Total Due Today</span>
+                  <span className="text-base font-bold text-slate-900">{selectedPlan.id === 'dfy' ? 'Total' : 'Total due today'}</span>
                   <span className="text-3xl font-extrabold text-indigo-600 tracking-tight">
                     {selectedPlan.formattedPrice}
                   </span>
@@ -1739,13 +1730,13 @@ const Checkout: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 mt-1">
-                    One-time payment. Your Blueprint is emailed to the address that received your free report.
+                    {selectedPlan.id === 'diy' ? 'One-time payment. Your Blueprint is emailed to the address that received your free report.' : 'One-time payment'}
                   </p>
                 )}
               </div>
 
               {/* Purchase Button Desktop */}
-              <button
+              {selectedPlan.id === 'diy' && <button
                 type="submit"
                 form="checkout-form"
                 disabled={!isFormSubmittable}
@@ -1761,7 +1752,7 @@ const Checkout: React.FC = () => {
                 ) : (
                   <span>Complete Order • {selectedPlan.formattedPrice}</span>
                 )}
-              </button>
+              </button>}
 
               {/* Security Badges */}
               <div className="mt-6 pt-6 border-t border-slate-100 space-y-3 text-xs text-slate-500">
