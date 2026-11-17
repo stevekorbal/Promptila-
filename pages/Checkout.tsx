@@ -605,8 +605,7 @@ const Checkout: React.FC = () => {
     formData.phone.trim() &&
     formData.businessName.trim() &&
     formData.website.trim() &&
-    formData.city.trim() &&
-    formData.state.trim()
+    formData.city.trim()
   );
 
   // Scroll to top on load
@@ -791,20 +790,14 @@ const Checkout: React.FC = () => {
     setSearchParams(nextParams);
   };
 
-  // Automatically look up completed audits after all four business identifiers are entered.
+  // Automatically look up completed audits after email, website, and city are entered.
   // Ignore stale responses when the buyer changes any of those fields.
   useEffect(() => {
     if (selectedPlan.id !== 'diy') return;
     const email = formData.email.trim().toLowerCase();
     const website = formData.website.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
-    const normalizeState = (value: string) => {
-      const v = value.trim().toLowerCase().replace(/\./g, '');
-      const states: Record<string, string> = { michigan: 'mi' };
-      return states[v] || v;
-    };
     const city = formData.city.trim().toLowerCase();
-    const state = formData.state.trim().toLowerCase();
-    if (!isValidEmail(email) || !website || !city || !state) {
+    if (!isValidEmail(email) || !website || !city) {
       setAuditMatches([]);
       setAuditLookupDone(false);
       setAuditLookupError('');
@@ -825,7 +818,7 @@ const Checkout: React.FC = () => {
         if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
         const matches = (Array.isArray(result.matches) ? result.matches : []).filter((a: any) => {
           const auditWebsite = String(a.website || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
-          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city && normalizeState(String(a.state || '')) === normalizeState(state);
+          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city;
         });
         if (cancelled) return;
         setAuditMatches(matches);
@@ -843,7 +836,7 @@ const Checkout: React.FC = () => {
       }
     }, 500);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selectedPlan.id, formData.email, formData.website, formData.city, formData.state]);
+  }, [selectedPlan.id, formData.email, formData.website, formData.city]);
 
   const normalizeWebsiteUrl = (value: string): string => {
     const trimmed = value.trim();
@@ -1420,13 +1413,12 @@ const Checkout: React.FC = () => {
 
                   <div>
                     <label htmlFor="state" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      State / Region <span className="text-rose-500">*</span>
+                      State / Region (optional)
                     </label>
                     <input
                       type="text"
                       id="state"
                       name="state"
-                      required
                       value={formData.state}
                       onChange={handleInputChange}
                       placeholder="Arizona"
@@ -1437,8 +1429,8 @@ const Checkout: React.FC = () => {
                   {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
                     <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
                       <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
-                      <p className="text-xs text-slate-600">Enter your email, website, city and state above. Matching completed audits appear automatically. No account is required to pay.</p>
-                      <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website, city and state.'}</p>
+                      <p className="text-xs text-slate-600">Enter your email, website and city above. Matching completed audits appear automatically. No account is required to pay.</p>
+                      <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website and city.'}</p>
 
                       {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
                       {auditLookupDone && auditMatches.length === 0 && (
@@ -1532,7 +1524,7 @@ const Checkout: React.FC = () => {
                         {selectedPlan.id === 'diy' && !auditId ? (
                           <>
                             <p className="text-sm font-semibold text-rose-700">Free audit not selected</p>
-                            <p className="text-xs text-slate-600 mt-1">Enter your email, website, city and state above. Matching completed audits appear automatically.</p>
+                            <p className="text-xs text-slate-600 mt-1">Enter your email, website and city above. Matching completed audits appear automatically.</p>
                           </>
                         ) : !isDetailsComplete ? (
                           <>
