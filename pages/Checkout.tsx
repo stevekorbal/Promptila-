@@ -504,51 +504,7 @@ const Checkout: React.FC = () => {
         setFormData((prev) => {
           const next = { ...prev };
 
-          // Customer Profile fields:
-          // firstName ← profiles.first_name
-          if (
-            resolvedProfile?.first_name &&
-            !userEditedFieldsRef.current.has('firstName') &&
-            !next.firstName.trim()
-          ) {
-            next.firstName = resolvedProfile.first_name;
-            autoPopulatedFieldsRef.current.add('firstName');
-            populatedCount++;
-          }
-
-          // lastName ← profiles.last_name
-          if (
-            resolvedProfile?.last_name &&
-            !userEditedFieldsRef.current.has('lastName') &&
-            !next.lastName.trim()
-          ) {
-            next.lastName = resolvedProfile.last_name;
-            autoPopulatedFieldsRef.current.add('lastName');
-            populatedCount++;
-          }
-
-          // email ← profiles.email, falling back to user.email
-          const userEmail = (resolvedProfile?.email || user.email || '').trim();
-          if (
-            userEmail &&
-            !userEditedFieldsRef.current.has('email') &&
-            !next.email.trim()
-          ) {
-            next.email = userEmail;
-            autoPopulatedFieldsRef.current.add('email');
-            populatedCount++;
-          }
-
-          // phone ← profiles.phone
-          if (
-            resolvedProfile?.phone &&
-            !userEditedFieldsRef.current.has('phone') &&
-            !next.phone.trim()
-          ) {
-            next.phone = resolvedProfile.phone;
-            autoPopulatedFieldsRef.current.add('phone');
-            populatedCount++;
-          }
+          // Buyer contact details must be entered by the buyer; never auto-fill them.
 
           // Business fields (only when targetBusiness is resolved):
           if (targetBusiness) {
@@ -835,46 +791,54 @@ const Checkout: React.FC = () => {
     setSearchParams(nextParams);
   };
 
-  const findCheckoutAudits = async () => {
-    setAuditLookupError('');
-    setAuditLookupDone(false);
-    setAuditMatches([]);
-    setAuditId('');
+  // Automatically look up completed audits after all four business identifiers are entered.
+  // Ignore stale responses when the buyer changes any of those fields.
+  useEffect(() => {
+    if (selectedPlan.id !== 'diy') return;
     const email = formData.email.trim().toLowerCase();
-    if (!isValidEmail(email)) {
-      setAuditLookupError('Enter the email used for your free audit.');
+    const website = formData.website.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
+    const city = formData.city.trim().toLowerCase();
+    const state = formData.state.trim().toLowerCase();
+    if (!isValidEmail(email) || !website || !city || !state) {
+      setAuditMatches([]);
+      setAuditLookupDone(false);
+      setAuditLookupError('');
       return;
     }
-    setAuditLookupLoading(true);
-    try {
-      const response = await fetch('/api/guest-checkout-audits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const responseText = await response.text();
-      let result: any;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setAuditLookupLoading(true);
+      setAuditLookupError('');
+      setAuditLookupDone(false);
       try {
-        result = JSON.parse(responseText);
-      } catch {
-        throw new Error(
-          response.ok
-            ? 'The audit lookup returned an unexpected response. Please try again.'
-            : 'The audit lookup service is unavailable (HTTP ' + response.status + '). Please try again shortly.'
-        );
+        const response = await fetch('/api/guest-checkout-audits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
+        const matches = (Array.isArray(result.matches) ? result.matches : []).filter((a: any) => {
+          const auditWebsite = String(a.website || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
+          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city && String(a.state || '').trim().toLowerCase() === state;
+        });
+        if (cancelled) return;
+        setAuditMatches(matches);
+        setAuditLookupEmail(email);
+        setAuditLookupDone(true);
+        if (matches.length === 1) {
+          setAuditId(sanitizeAuditId(matches[0].audit_id));
+        } else {
+          setAuditId('');
+        }
+      } catch (error: any) {
+        if (!cancelled) setAuditLookupError(error?.message || 'Unable to find your audit.');
+      } finally {
+        if (!cancelled) setAuditLookupLoading(false);
       }
-      if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
-      const matches = Array.isArray(result.matches) ? result.matches : [];
-      setAuditMatches(matches);
-      setAuditLookupEmail(email);
-      setAuditLookupDone(true);
-      if (matches.length === 1) selectCheckoutAudit(matches[0]);
-    } catch (error: any) {
-      setAuditLookupError(error?.message || 'Unable to find your audit.');
-    } finally {
-      setAuditLookupLoading(false);
-    }
-  };
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [selectedPlan.id, formData.email, formData.website, formData.city, formData.state]);
 
   const normalizeWebsiteUrl = (value: string): string => {
     const trimmed = value.trim();
@@ -886,7 +850,7 @@ const Checkout: React.FC = () => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
+    setFormData(prev => ({ ...prev, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1243,14 +1207,11 @@ const Checkout: React.FC = () => {
                     <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
                       <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
                       <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. No account is required to pay.</p>
-                      <button type="button" onClick={findCheckoutAudits} disabled={auditLookupLoading}
-                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                        {auditLookupLoading ? 'Checking…' : 'Find my free audit'}
-                      </button>
+                      <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website, city and state.'}</p>
 
                       {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
                       {auditLookupDone && auditMatches.length === 0 && (
-                        <p className="text-xs text-slate-700">No completed free audit was found for this email. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
+                        <p className="text-xs text-slate-700">No completed free audit matches these details. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
                       )}
                       {auditMatches.length > 0 && (
                         <div className="space-y-2">
@@ -1258,7 +1219,7 @@ const Checkout: React.FC = () => {
                           {auditMatches.map(a => (
                             <button key={a.audit_id} type="button" onClick={() => selectCheckoutAudit(a)}
                               className={`block w-full rounded-lg border p-3 text-left text-xs ${auditId === a.audit_id ? 'border-indigo-600 bg-white font-bold' : 'border-slate-200 bg-white'}`}>
-                              {a.business_name} — {a.audit_id}{a.location ? ` · ${a.location}` : ''}
+                              {a.business_name} — {a.audit_id} · {a.website} · {a.city}, {a.state}
                             </button>
                           ))}
                           {auditId && <p className="text-xs text-emerald-700">Selected audit: {auditId}. You can continue to payment.</p>}
