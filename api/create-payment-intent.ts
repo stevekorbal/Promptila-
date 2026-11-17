@@ -74,6 +74,17 @@ export default async function handler(
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return res.status(503).json({ error: 'Checkout audit verification is not configured.' });
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Payment creation requires the verified owner of the original free audit.
+  // This endpoint holds a service role key, so checking only the submitted email
+  // would allow anyone who knew an audit owner's address to initiate a checkout.
+  const bearer = /^Bearer (.+)$/i.exec(req.headers.authorization || '')?.[1];
+  if (!bearer) return res.status(401).json({ error: 'Sign in to purchase your Blueprint.' });
+  const { data: userResult, error: userError } = await db.auth.getUser(bearer);
+  const signedInUser = userResult?.user;
+  if (userError || !signedInUser || !signedInUser.email_confirmed_at) {
+    return res.status(401).json({ error: 'Please confirm your email and sign in again.' });
+  }
+  const verifiedEmail = String(signedInUser.email || '').trim().toLowerCase();
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -97,14 +108,27 @@ export default async function handler(
       return res.status(400).json({ error: 'Enter a valid email address.' });
     }
     if (!metadata.audit_id) return res.status(400).json({ error: 'Select a completed free audit.' });
+    if (metadata.customer_email !== verifiedEmail) {
+      return res.status(403).json({ error: 'Use your verified account email for this Blueprint.' });
+    }
     const { data: ownedAudit, error: auditError } = await db.from('audits')
-      .select('audit_id,contact_email,overall_score,status,needs_review,business_name,website')
+      .select('audit_id,contact_email,user_id,audit_request_id,overall_score,status,needs_review,business_name,website')
       .eq('audit_id', metadata.audit_id).maybeSingle();
     if (auditError) return res.status(503).json({ error: 'Unable to verify free audit.' });
-    if (!ownedAudit || String(ownedAudit.contact_email || '').trim().toLowerCase() !== metadata.customer_email ||
+    if (!ownedAudit || String(ownedAudit.contact_email || '').trim().toLowerCase() !== verifiedEmail ||
+      (ownedAudit.user_id && ownedAudit.user_id !== signedInUser.id) ||
       ownedAudit.overall_score === null || ownedAudit.needs_review !== false ||
       !['free_audit_sent', 'completed'].includes(ownedAudit.status)) {
-      return res.status(403).json({ error: 'No eligible completed free audit matches this email and audit.' });
+      return res.status(403).json({ error: 'No eligible completed free audit belongs to this account.' });
+    }
+    // The source request must agree with the verified owner as well.
+    if (!ownedAudit.audit_request_id) return res.status(403).json({ error: 'Audit ownership could not be confirmed.' });
+    const { data: requestOwner, error: requestError } = await db.from('audit_requests')
+      .select('email,user_id').eq('id', ownedAudit.audit_request_id).maybeSingle();
+    if (requestError) return res.status(503).json({ error: 'Unable to verify the original audit request.' });
+    if (!requestOwner || String(requestOwner.email || '').trim().toLowerCase() !== verifiedEmail ||
+      (requestOwner.user_id && requestOwner.user_id !== signedInUser.id)) {
+      return res.status(403).json({ error: 'Audit ownership could not be confirmed.' });
     }
     // Never trust client-supplied business identity for fulfillment.
     const securedMetadata = {
