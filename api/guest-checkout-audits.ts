@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const requestMap = new Map<string, any>();
     if (requestIds.length) {
       const { data: requests, error: requestError } = await db.from('audit_requests')
-        .select('id,first_name,last_name,email,phone,business_name,website,city,state')
+        .select('id,email,business_name,website,city,state')
         .in('id', requestIds);
       if (requestError) throw requestError;
       for (const item of requests || []) {
@@ -61,9 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         audit_id: a.audit_id,
         business_name: request?.business_name || a.business_name || '',
         website: request?.website || a.website || '',
-        first_name: request?.first_name || '',
-        last_name: request?.last_name || '',
-        phone: request?.phone || '',
         city: request?.city || '',
         state: request?.state || '',
       };
