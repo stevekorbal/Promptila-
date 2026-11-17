@@ -1427,7 +1427,7 @@ const Checkout: React.FC = () => {
                   </div>
                 </div>
                   {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
-                    <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
+                    <div className="sm:col-span-2 mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
                       <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
                       <p className="text-xs text-slate-600">Enter your email, website and city above. Matching completed audits appear automatically. No account is required to pay.</p>
                       <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website and city.'}</p>
