@@ -504,51 +504,7 @@ const Checkout: React.FC = () => {
         setFormData((prev) => {
           const next = { ...prev };
 
-          // Customer Profile fields:
-          // firstName ← profiles.first_name
-          if (
-            resolvedProfile?.first_name &&
-            !userEditedFieldsRef.current.has('firstName') &&
-            !next.firstName.trim()
-          ) {
-            next.firstName = resolvedProfile.first_name;
-            autoPopulatedFieldsRef.current.add('firstName');
-            populatedCount++;
-          }
-
-          // lastName ← profiles.last_name
-          if (
-            resolvedProfile?.last_name &&
-            !userEditedFieldsRef.current.has('lastName') &&
-            !next.lastName.trim()
-          ) {
-            next.lastName = resolvedProfile.last_name;
-            autoPopulatedFieldsRef.current.add('lastName');
-            populatedCount++;
-          }
-
-          // email ← profiles.email, falling back to user.email
-          const userEmail = (resolvedProfile?.email || user.email || '').trim();
-          if (
-            userEmail &&
-            !userEditedFieldsRef.current.has('email') &&
-            !next.email.trim()
-          ) {
-            next.email = userEmail;
-            autoPopulatedFieldsRef.current.add('email');
-            populatedCount++;
-          }
-
-          // phone ← profiles.phone
-          if (
-            resolvedProfile?.phone &&
-            !userEditedFieldsRef.current.has('phone') &&
-            !next.phone.trim()
-          ) {
-            next.phone = resolvedProfile.phone;
-            autoPopulatedFieldsRef.current.add('phone');
-            populatedCount++;
-          }
+          // Buyer contact details must be entered by the buyer; never auto-fill them.
 
           // Business fields (only when targetBusiness is resolved):
           if (targetBusiness) {
@@ -886,7 +842,7 @@ const Checkout: React.FC = () => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, firstName: (audit as any).first_name || prev.firstName, lastName: (audit as any).last_name || prev.lastName, phone: (audit as any).phone || prev.phone, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
+    setFormData(prev => ({ ...prev, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
