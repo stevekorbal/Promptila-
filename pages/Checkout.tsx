@@ -797,6 +797,11 @@ const Checkout: React.FC = () => {
     if (selectedPlan.id !== 'diy') return;
     const email = formData.email.trim().toLowerCase();
     const website = formData.website.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
+    const normalizeState = (value: string) => {
+      const v = value.trim().toLowerCase().replace(/\./g, '');
+      const states: Record<string, string> = { michigan: 'mi' };
+      return states[v] || v;
+    };
     const city = formData.city.trim().toLowerCase();
     const state = formData.state.trim().toLowerCase();
     if (!isValidEmail(email) || !website || !city || !state) {
@@ -820,7 +825,7 @@ const Checkout: React.FC = () => {
         if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
         const matches = (Array.isArray(result.matches) ? result.matches : []).filter((a: any) => {
           const auditWebsite = String(a.website || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
-          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city && String(a.state || '').trim().toLowerCase() === state;
+          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city && normalizeState(String(a.state || '')) === normalizeState(state);
         });
         if (cancelled) return;
         setAuditMatches(matches);
@@ -1203,30 +1208,6 @@ const Checkout: React.FC = () => {
                     </div>
                   </div>
 
-                  {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
-                    <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
-                      <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
-                      <p className="text-xs text-slate-600">Enter the email you used for your free audit above, then find your completed audit. No account is required to pay.</p>
-                      <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website, city and state.'}</p>
-
-                      {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
-                      {auditLookupDone && auditMatches.length === 0 && (
-                        <p className="text-xs text-slate-700">No completed free audit matches these details. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
-                      )}
-                      {auditMatches.length > 0 && (
-                        <div className="space-y-2">
-                          {auditMatches.length > 1 && <p className="text-xs text-slate-700">Multiple audits found. Select the correct business:</p>}
-                          {auditMatches.map(a => (
-                            <button key={a.audit_id} type="button" onClick={() => selectCheckoutAudit(a)}
-                              className={`block w-full rounded-lg border p-3 text-left text-xs ${auditId === a.audit_id ? 'border-indigo-600 bg-white font-bold' : 'border-slate-200 bg-white'}`}>
-                              {a.business_name} — {a.audit_id} · {a.website} · {a.city}, {a.state}
-                            </button>
-                          ))}
-                          {auditId && <p className="text-xs text-emerald-700">Selected audit: {auditId}. You can continue to payment.</p>}
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   <div>
                     <label htmlFor="phone" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -1453,6 +1434,30 @@ const Checkout: React.FC = () => {
                     />
                   </div>
                 </div>
+                  {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
+                    <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
+                      <p className="text-sm font-bold text-slate-900">Connect your free audit before paying</p>
+                      <p className="text-xs text-slate-600">Enter your email, website, city and state above. Matching completed audits appear automatically. No account is required to pay.</p>
+                      <p className="text-xs text-slate-700">{auditLookupLoading ? 'Checking for your free audit…' : 'Your free audit is checked automatically after you enter email, website, city and state.'}</p>
+
+                      {auditLookupError && <p role="alert" className="text-xs text-rose-700">{auditLookupError}</p>}
+                      {auditLookupDone && auditMatches.length === 0 && (
+                        <p className="text-xs text-slate-700">No completed free audit matches these details. <Link to="/" className="font-bold text-indigo-700 underline">Complete your free audit first</Link>.</p>
+                      )}
+                      {auditMatches.length > 0 && (
+                        <div className="space-y-2">
+                          {auditMatches.length > 1 && <p className="text-xs text-slate-700">Multiple audits found. Select the correct business:</p>}
+                          {auditMatches.map(a => (
+                            <button key={a.audit_id} type="button" onClick={() => selectCheckoutAudit(a)}
+                              className={`block w-full rounded-lg border p-3 text-left text-xs ${auditId === a.audit_id ? 'border-indigo-600 bg-white font-bold' : 'border-slate-200 bg-white'}`}>
+                              {a.business_name} — {a.audit_id} · {a.website} · {a.city}, {a.state}
+                            </button>
+                          ))}
+                          {auditId && <p className="text-xs text-emerald-700">Selected audit: {auditId}. You can continue to payment.</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
               </div>
 
               )}
@@ -1526,21 +1531,8 @@ const Checkout: React.FC = () => {
                         <Lock className="w-6 h-6 text-slate-400 mx-auto mb-2" />
                         {selectedPlan.id === 'diy' && !auditId ? (
                           <>
-                            <p className="text-sm font-semibold text-rose-700">Find your free audit to continue</p>
-                            <p className="text-xs text-slate-600 mt-1">
-                              Enter the email used for your free audit to find your business and continue as a guest.
-                            </p>
-                            <button type="button" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                              className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white">
-                              Find audit using email above
-                            </button>
-                          </>
-                        ) : selectedPlan.id === 'diy' && !auditId ? (
-                          <>
                             <p className="text-sm font-semibold text-rose-700">Free audit not selected</p>
-                            <p className="text-xs text-slate-600 mt-1">
-                              Find and select your completed free audit above before payment. If no audit is found, complete a free audit first.
-                            </p>
+                            <p className="text-xs text-slate-600 mt-1">Enter your email, website, city and state above. Matching completed audits appear automatically.</p>
                           </>
                         ) : !isDetailsComplete ? (
                           <>
