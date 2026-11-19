@@ -136,15 +136,15 @@ export function calculate(checks:Check[]):Score{
   }
   return {score:s,status:complete?'complete':'incomplete',classification,categories,engines,crawlerAccess};
 }
-export async function scanWebsite(raw:unknown){
+export async function scanWebsite(raw:unknown, fetcher:typeof safeFetch=safeFetch){
   const url=validateWebsite(raw),started=performance.now();
   const checks:Check[]=[];
   function add(id:string,category:string,label:string,points:number,status:Verdict,evidence:string){
     checks.push({id,category,label,points,status,evidence:evidence.slice(0,240)});
   }
   let homepage:PageResponse|null=null,robots:PageResponse|null=null,llms:PageResponse|null=null,about:PageResponse|null=null;
-  const home=async()=>safeFetch(url,started).catch(()=>null);
-  const aux=(path:string)=>safeFetch(new URL(path,url),started).catch(()=>null);
+  const home=async()=>fetcher(url,started).catch(()=>null);
+  const aux=(path:string)=>fetcher(new URL(path,url),started).catch(()=>null);
   [homepage,robots,llms]=await Promise.all([home(),aux('/robots.txt'),aux('/llms.txt')]);
   const available=!!homepage&&homepage.status>=200&&homepage.status<300&&homepage.type.includes('html');
   const html=available?homepage!.body:'';
@@ -184,14 +184,14 @@ export async function scanWebsite(raw:unknown){
   const brandKnown=siteName.length>=3&&!/^(home|welcome)$/i.test(siteName);
   const services=readable&&/(services|solutions|products|plumbing|heating|candy|repair|installation|what we do)/i.test(text.slice(0,4000));
   const aboutPath=readable?html.match(/<a\b[^>]*href=["']([^"']*(?:about|our-story)[^"']*)["'][^>]*>/i)?.[1]:null;
-  if(aboutPath){try{const candidate=new URL(aboutPath,url);if(candidate.hostname===url.hostname&&candidate.pathname.length<160)about=await safeFetch(candidate,started).catch(()=>null);}catch{}}
+  if(aboutPath){try{const candidate=new URL(aboutPath,url);if(candidate.hostname===url.hostname&&candidate.pathname.length<160)about=await fetcher(candidate,started).catch(()=>null);}catch{}}
   add('D1','Content and entity signals','Brand identifiable',4,!available?'unverified':brandKnown?'pass':'fail',siteName||htmlEvidence);
   add('D2','Content and entity signals','Products or services identifiable',4,!readable?'unverified':services?'pass':'fail',readable?'Readable homepage checked':'Content depends on JavaScript or is unavailable');
   add('D3','Content and entity signals','About or company information',4,!readable?'unverified':!aboutPath?'fail':!about?'unverified':about.status===200?'pass':'fail',aboutPath?'About link checked':'No About link found in initial HTML');
   add('D4','Content and entity signals','Consistent brand signals',3,!readable?'unverified':brandKnown&&text.toLowerCase().includes(siteName.toLowerCase())?'pass':'fail',readable?'Title and text compared':'Rendered text unavailable');
   const validLlms=!!llms&&llms.status===200&&!llms.type.includes('html')&&!/^\s*</.test(llms.body)&&llms.body.trim().length>0;
   const absentLlms=!!llms&&[404,410].includes(llms.status);
-  const llmsVerdict=(pass:boolean):Verdict=>validLlms?(pass?'pass':'fail'):absentLlms?'fail':'unverified';
+  const llmsVerdict=(pass:boolean):Verdict=>validLlms?(pass?'pass':'fail'):(absentLlms||llms?.status===200&&llms.type.includes('html'))?'fail':'unverified';
   add('E1','llms.txt','Valid llms.txt text document',5,llmsVerdict(true),validLlms?'Text document returned':absentLlms?'File not found':'File response could not be verified');
   add('E2','llms.txt','Meaningful site description',3,llmsVerdict(!!llms&&clean(llms.body).length>=50),validLlms?'Text checked':'No verified text document');
   add('E3','llms.txt','Links to site resources',2,llmsVerdict(!!llms&&/https?:\/\/[^\s)]+/.test(llms.body)),validLlms?'Links checked':'No verified text document');
