@@ -17,7 +17,8 @@ export function publicResult(row:any){
   score:r.score,classification:r.classification,categories:r.categories,engines:r.engines,
   crawlerAccess:r.crawlerAccess,checks:r.checks,js_dependent:r.js_dependent,
   elapsed_ms:r.elapsed_ms,request_count:r.request_count,bytes_fetched:r.bytes_fetched,
-  disclaimer:r.disclaimer,llms_note:r.llms_note};
+  disclaimer:r.disclaimer,llms_note:r.llms_note,
+  robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional};
 }
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
