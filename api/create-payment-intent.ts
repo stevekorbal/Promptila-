@@ -84,11 +84,6 @@ export default async function handler(
   if (!secretKey?.startsWith('sk_test_') || !publishableKey?.startsWith('pk_test_')) {
     return res.status(503).json({ error: 'Stripe test-mode credentials are required. Payment is disabled.' });
   }
-    return res.status(500).json({
-      error: 'Stripe secret key is not configured',
-    });
-  }
-
   try {
     const stripe = getStripeInstance();
     const body = req.body || {};
