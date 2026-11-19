@@ -27,3 +27,19 @@ jobs:
           name: instant-checker-private-results
           path: instant-checker-private-results.json
           if-no-files-found: warn
+      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright
+      - run: npx playwright install chromium
+      - name: Capture private report screenshots
+        run: |
+          npm run dev > /tmp/instant-checker-dev.log 2>&1 &
+          for i in $(seq 1 25); do
+            curl -fsS http://127.0.0.1:3000/ai-visibility-checker > /dev/null && break
+            sleep 1
+          done
+          node tests/instant-checker-screenshots.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: instant-checker-private-screenshots
+          path: qa-screenshots/
+          if-no-files-found: warn
