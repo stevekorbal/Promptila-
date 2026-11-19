@@ -121,7 +121,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
    effectiveRobots?agent+' robots.txt rule: '+result:robotsAbsent?'robots.txt absent; no declared restrictions':evidenceReason(robots,errors['/robots.txt'],'robots.txt'));
  }
  add('A5','AI crawler access','Homepage fetchable',5,
-  htmlAvailable?'pass':home&&[401,403,404,410].includes(home.status)?'fail':'unverified',
+  htmlAvailable?'pass':(home as PageResponse|null)&&[401,403,404,410].includes((home as PageResponse).status)?'fail':'unverified',
   evidenceReason(home,errors['/'],'Homepage'));
 
  // Structured data: only parsed JSON-LD with substantive properties qualifies.
