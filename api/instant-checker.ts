@@ -51,9 +51,14 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if(claim!=='claimed')return res.status(503).json({error:'Unable to reserve scan.'});
   try{
    const output=await scanWebsite(url.href);
+   const cpuRate=Number(process.env.INSTANT_COMPUTE_USD_PER_MS);
+   const transferRate=Number(process.env.INSTANT_TRANSFER_USD_PER_BYTE);
+   const calibrated=process.env.INSTANT_COMPUTE_USD_PER_MS!==undefined&&process.env.INSTANT_TRANSFER_USD_PER_BYTE!==undefined&&Number.isFinite(cpuRate)&&Number.isFinite(transferRate)&&cpuRate>=0&&transferRate>=0;
+   const estimatedCost=calibrated?Number((output.elapsed_ms*cpuRate+output.bytes_fetched*transferRate).toFixed(6)):null;
    const {error:updateError}=await db.from('instant_scans').update({
     status:output.status,result:output,score_version:output.version,
     elapsed_ms:output.elapsed_ms,bytes_fetched:output.bytes_fetched,request_count:output.request_count,
+    estimated_cost_usd:estimatedCost,
     scanned_at:output.scanned_at,
     expires_at:new Date(Date.now()+7*86400_000).toISOString()
    }).eq('domain',domain).eq('status','running');
