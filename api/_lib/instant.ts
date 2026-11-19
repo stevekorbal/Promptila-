@@ -20,7 +20,7 @@ export function admitted(req:VercelRequest,res:VercelResponse){
 }
 export function clientHash(req:VercelRequest){
  // Vercel should supply the ingress client address. Must be verified against deployment proxy configuration before public enablement.
- const raw=String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown').split(',')[0].trim();
+ const raw=String(req.headers['x-vercel-forwarded-for']||req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown').split(',')[0].trim();
  return createHash('sha256').update(String(process.env.INSTANT_CHECKER_RATE_SALT||process.env.INSTANT_CHECKER_PRIVATE_TOKEN||'')+':'+raw).digest('hex');
 }
 export function publicFields(result:any){
