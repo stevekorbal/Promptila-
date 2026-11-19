@@ -4,7 +4,7 @@ create table if not exists public.instant_scans (
  status text not null default 'running' check (status in ('running','complete','incomplete','error')),
  result jsonb, score_version text not null default 'instant-v1.0',
  elapsed_ms integer, bytes_fetched integer, request_count integer,
- estimated_cost_usd numeric(10,6) not null default 0,
+ estimated_cost_usd numeric(10,6),
  started_at timestamptz not null default now(), scanned_at timestamptz, expires_at timestamptz,
  lease_expires_at timestamptz not null default now() + interval '30 seconds',
  created_at timestamptz not null default now()
