@@ -24,7 +24,7 @@ function ldObjects(html:string){const result:any[]=[];let invalid=false;for(cons
 function hasType(objs:any[],type:string):boolean{for(const o of objs){if(!o||typeof o!=='object')continue;const t=o['@type'];if((Array.isArray(t)?t:[t]).some((v:any)=>String(v||'').toLowerCase().includes(type.toLowerCase())))return true;if(Array.isArray(o['@graph'])&&hasType(o['@graph'],type))return true;}return false;}
 function getAny(objs:any[],property:string):boolean{return objs.some(o=>!!o?.[property]||(Array.isArray(o?.['@graph'])&&getAny(o['@graph'],property)));}
 function jsShell(html:string,content:string){return (content.length<250&&(/id=["'](?:root|app|__next)["']|data-reactroot|__nuxt|ng-version/i.test(html)||/<script\b/gi.test(html)))||(/enable javascript|loading application/i.test(content.slice(0,300))&&content.length<500));}
-type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number;indexHeader:string};
+export type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number;indexHeader:string};
 async function safeFetch(url:string,signal?:AbortSignal):Promise<FetchResult>{
  try{
   const res=await guardedFetch(url,{method:'GET',redirect:'follow',maxRedirects:3,timeoutMs:5000,signal,opaqueErrors:true,blockedEncodings:['br'],headers:{'User-Agent':'PromptilaInstantChecker/1.0','Accept':'text/html,text/plain,application/xml;q=0.8,*/*;q=0.1'}});
@@ -49,9 +49,9 @@ function robotAccess(r:FetchResult,agent:string):Verdict{
  if(!rules.length)return 'pass';
  const max=Math.max(...rules.map(x=>x.path.length));return rules.some(x=>x.path.length===max&&x.allow)?'pass':'fail';
 }
-export async function scanSite(input:string){
+export async function scanSite(input:string,fetcher:(url:string)=>Promise<FetchResult>=safeFetch){
  const {host,url}=normalizeSite(input);const began=Date.now();
- const [home,robots,llms]=await Promise.all([safeFetch(url),safeFetch(url+'robots.txt'),safeFetch(url+'llms.txt')]);
+ const [home,robots,llms]=await Promise.all([fetcher(url),fetcher(url+'robots.txt'),fetcher(url+'llms.txt')]);
  if(home.kind!=='ok'||!home.contentType.includes('html')||!['www.'+host,host,host.replace(/^www\./,'')].includes(new URL(home.url).hostname.toLowerCase()))return {host,url,version:SCORING_VERSION,status:'incomplete',score:null,classification:null,categories:{},estimates:null,crawler:{},checks:[],summary:'The homepage could not be reliably inspected.',duration_ms:Date.now()-began,bytes:home.bytes+robots.bytes+llms.bytes,requests:3,scanned_at:new Date().toISOString()};
  const html=home.text;const body=strip(html);const shell=jsShell(html,body);
  const title=textTag(html,'title'),description=meta(html,'description');
@@ -62,7 +62,7 @@ export async function scanSite(input:string){
  // Discover at most three same-host content pages; only HTML anchor URLs, never arbitrary external links.
  const links=[...html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
  const candidates:string[]=[];for(const x of links){try{const u=new URL(x,home.url);if(u.hostname.toLowerCase()!==host||!['http:','https:'].includes(u.protocol)||u.port||/\/(?:login|account|cart|checkout|search|wp-admin)\b/i.test(u.pathname))continue;if(u.pathname==='/'||candidates.includes(u.origin+u.pathname))continue;if(/about|service|product|company|story/i.test(u.pathname))candidates.push(u.origin+u.pathname);}catch{}if(candidates.length===3)break;}
- const pages=await Promise.all(candidates.map(x=>safeFetch(x)));const pageTexts=pages.filter(x=>x.kind==='ok'&&x.contentType.includes('html')).map(x=>strip(x.text));const allText=[body,...pageTexts].join(' ');
+ const pages=await Promise.all(candidates.map(x=>fetcher(x)));const pageTexts=pages.filter(x=>x.kind==='ok'&&x.contentType.includes('html')).map(x=>strip(x.text));const allText=[body,...pageTexts].join(' ');
  const rootJs=shell&&pageTexts.every(x=>x.length<200);const ch:Check[]=[];
  const add=(category:string,id:string,label:string,points:number,verdict:Verdict,evidence:string)=>ch.push({id,category,label,points,verdict,evidence:evidence.slice(0,250)});
  for(const [agent,n] of [['GPTBot','A1'],['ClaudeBot','A2'],['PerplexityBot','A3'],['Google-Extended','A4']] as const){const v=robotAccess(robots,agent);add('crawler',n,agent+' robots.txt permission',5,v,v==='unverified'?'robots.txt could not be verified':v==='pass'?'No verified block for this agent':'Explicit homepage block detected');}
