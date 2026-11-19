@@ -825,8 +825,7 @@ const Checkout: React.FC = () => {
         try {
           const { paymentIntent } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
           if (paymentIntent && paymentIntent.status === 'succeeded') {
-            const confirmedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
-            setOrderId(confirmedId);
+            setOrderId(paymentIntent.id);
             setConfirmedPaymentId(paymentIntent.id);
             setIsSuccess(true);
           }
@@ -980,6 +979,7 @@ const Checkout: React.FC = () => {
               customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
               business_name: formData.businessName.trim(),
               website: formData.website.trim(),
+              phone: formData.phone.trim(),
             }),
           });
           if (!updateResponse.ok) throw new Error('Unable to verify payment details. Please retry.');
@@ -997,37 +997,11 @@ const Checkout: React.FC = () => {
       }
 
       if (paymentIntent && paymentIntent.status === 'succeeded') {
-        const generatedId = `PRM-${Math.floor(100000 + Math.random() * 900000)}`;
+        const verifiedPaymentReference = paymentIntent.id;
 
-        const supabase = getSupabaseClient();
-        if (supabase && user) {
-          try {
-            // Save business if specified
-            if (formData.businessName && formData.website) {
-              await supabase.from('businesses').insert({
-                user_id: user.id,
-                name: formData.businessName,
-                website: formData.website,
-                city: formData.city,
-                state: formData.state,
-                phone: formData.phone,
-              });
-            }
-
-            // Record completed order only after payment success
-            await supabase.from('orders').insert({
-              user_id: user.id,
-              service_name: selectedPlan.name,
-              amount: selectedPlan.price,
-              status: 'completed',
-              billing_type: selectedPlan.billingType,
-            });
-          } catch (dbErr) {
-            console.warn('Could not persist order to Supabase:', dbErr);
-          }
-        }
-
-        setOrderId(generatedId);
+        // PaymentIntent status is authoritative; only the server-side Stripe webhook
+        // may create the paid Blueprint order and associated delivery records.
+        setOrderId(verifiedPaymentReference);
         setConfirmedPaymentId(paymentIntent.id);
         setIsProcessing(false);
         setIsSuccess(true);
@@ -1053,14 +1027,14 @@ const Checkout: React.FC = () => {
             </div>
 
             <span className="inline-flex items-center space-x-1 text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 mb-4">
-              <span>Order Confirmed • #{orderId}</span>
+              <span>Stripe payment confirmed • {orderId}</span>
             </span>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-3">
               Thank You, {formData.firstName || 'Partner'}!
             </h1>
             <p className="text-lg text-slate-600 max-w-xl mx-auto mb-8">
-              Your order for <strong className="text-slate-900">{selectedPlan.name}</strong> has been received and confirmed. We are preparing your Blueprint from your completed free audit.
+              Your $299 payment for <strong className="text-slate-900">{selectedPlan.name}</strong> is confirmed by Stripe. Your Blueprint order and delivery will be completed through our secure payment webhook.
             </p>
 
             {/* Order Confirmation Card */}
