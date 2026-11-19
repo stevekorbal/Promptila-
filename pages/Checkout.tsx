@@ -119,6 +119,65 @@ export const sanitizeAuditId = (val: string | null | undefined): string => {
   return /^AUD-\d{4,}$/.test(cleaned) ? cleaned : '';
 };
 
+// Checkout only: display state names and consistently persist USPS two-letter codes.
+export const US_STATES: ReadonlyArray<{ code: string; name: string }> = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+];
+export const normalizeCheckoutState = (value: string | null | undefined): string => {
+  const cleaned = String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!cleaned) return '';
+  return US_STATES.find(s => s.code.toLowerCase() === cleaned || s.name.toLowerCase() === cleaned)?.code ?? '';
+};
+
 const Checkout: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -139,7 +198,7 @@ const Checkout: React.FC = () => {
   const rawProduct = searchParams.get('product') || searchParams.get('service');
   const selectedPlan = getServicePlan(rawProduct, plans);
 
-  const [auditMatches, setAuditMatches] = useState<Array<{ audit_id: string; business_name: string; website: string | null; location: string | null }>>([]);
+  const [auditMatches, setAuditMatches] = useState<Array<{ audit_id: string; business_name: string; website: string | null; city: string | null; state: string | null }>>([]);
   const [auditLookupEmail, setAuditLookupEmail] = useState('');
   const [auditLookupLoading, setAuditLookupLoading] = useState(false);
   const [auditLookupError, setAuditLookupError] = useState('');
@@ -547,7 +606,7 @@ const Checkout: React.FC = () => {
               !userEditedFieldsRef.current.has('state') &&
               !next.state.trim()
             ) {
-              next.state = targetBusiness.state;
+              next.state = normalizeCheckoutState(targetBusiness.state);
               autoPopulatedFieldsRef.current.add('state');
               populatedCount++;
             }
@@ -605,7 +664,8 @@ const Checkout: React.FC = () => {
     formData.phone.trim() &&
     formData.businessName.trim() &&
     formData.website.trim() &&
-    formData.city.trim()
+    formData.city.trim() &&
+    normalizeCheckoutState(formData.state)
   );
 
   // Scroll to top on load
@@ -797,6 +857,7 @@ const Checkout: React.FC = () => {
     const email = formData.email.trim().toLowerCase();
     const website = formData.website.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
     const city = formData.city.trim().toLowerCase();
+    const state = normalizeCheckoutState(formData.state);
     if (!isValidEmail(email) || !website || !city) {
       setAuditMatches([]);
       setAuditLookupDone(false);
@@ -818,14 +879,18 @@ const Checkout: React.FC = () => {
         if (!response.ok) throw new Error(result.error || 'Unable to find your audit.');
         const matches = (Array.isArray(result.matches) ? result.matches : []).filter((a: any) => {
           const auditWebsite = String(a.website || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
-          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city;
+          return auditWebsite === website && String(a.city || '').trim().toLowerCase() === city &&
+            (!state || normalizeCheckoutState(a.state) === state);
         });
         if (cancelled) return;
         setAuditMatches(matches);
         setAuditLookupEmail(email);
         setAuditLookupDone(true);
         if (matches.length === 1) {
-          setAuditId(sanitizeAuditId(matches[0].audit_id));
+          const match = matches[0];
+          setAuditId(sanitizeAuditId(match.audit_id));
+          const selectedState = normalizeCheckoutState(match.state);
+          if (selectedState) setFormData(prev => ({ ...prev, state: selectedState }));
         } else {
           setAuditId('');
         }
@@ -836,7 +901,7 @@ const Checkout: React.FC = () => {
       }
     }, 500);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selectedPlan.id, formData.email, formData.website, formData.city]);
+  }, [selectedPlan.id, formData.email, formData.website, formData.city, formData.state]);
 
   const normalizeWebsiteUrl = (value: string): string => {
     const trimmed = value.trim();
@@ -844,14 +909,14 @@ const Checkout: React.FC = () => {
     return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   };
 
-  const selectCheckoutAudit = (audit: { audit_id: string; business_name: string; website: string | null }) => {
+  const selectCheckoutAudit = (audit: { audit_id: string; business_name: string; website: string | null; city: string | null; state: string | null }) => {
     const id = sanitizeAuditId(audit.audit_id);
     if (!id) return;
     setAuditId(id);
-    setFormData(prev => ({ ...prev, city: (audit as any).city || prev.city, state: (audit as any).state || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
+    setFormData(prev => ({ ...prev, city: (audit as any).city || prev.city, state: normalizeCheckoutState(audit.state) || prev.state, businessName: audit.business_name || prev.businessName, website: normalizeWebsiteUrl(audit.website || prev.website) }));
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     userEditedFieldsRef.current.add(name as keyof CheckoutFormData);
     if (name === 'email' && value.trim().toLowerCase() !== auditLookupEmail) {
@@ -859,7 +924,7 @@ const Checkout: React.FC = () => {
       setAuditLookupDone(false);
       setAuditId(sanitizeAuditId(searchParams.get('audit_id')));
     }
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: name === 'state' ? normalizeCheckoutState(value) : value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1413,17 +1478,21 @@ const Checkout: React.FC = () => {
 
                   <div>
                     <label htmlFor="state" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      State / Region (optional)
+                      State *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       id="state"
                       name="state"
-                      value={formData.state}
+                      required
+                      value={normalizeCheckoutState(formData.state)}
                       onChange={handleInputChange}
-                      placeholder="Arizona"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                    />
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                    >
+                      <option value="">Select a state</option>
+                      {US_STATES.map(state => (
+                        <option key={state.code} value={state.code}>{state.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                   {selectedPlan.id === 'diy' && !sanitizeAuditId(searchParams.get('audit_id')) && (
@@ -1538,7 +1607,7 @@ const Checkout: React.FC = () => {
                                 !formData.businessName.trim() && 'Business name',
                                 !formData.website.trim() && 'Website URL',
                                 !formData.city.trim() && 'City',
-                                !formData.state.trim() && 'State / region',
+                                !normalizeCheckoutState(formData.state) && 'State',
                               ].filter(Boolean).join(', ')}.
                             </p>
                           </>
