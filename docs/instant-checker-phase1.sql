@@ -63,3 +63,22 @@ end;
 $$;
 revoke all on function public.instant_claim_scan(text,text,text) from public,anon,authenticated;
 grant execute on function public.instant_claim_scan(text,text,text) to service_role;
+
+-- Atomic independent lead-submission limiter: 5 attempts / hashed IP / hour.
+create or replace function public.instant_claim_lead(p_ip_hash text)
+returns boolean language plpgsql security invoker set search_path = ''
+as $$
+declare
+ v_start timestamptz := pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from now())/3600)*3600);
+ v_count integer;
+begin
+ if length(p_ip_hash)<>64 then return false; end if;
+ insert into public.instant_scan_rate(ip_hash,window_start,attempts)
+ values(p_ip_hash,v_start,1)
+ on conflict(ip_hash,window_start) do update set attempts=public.instant_scan_rate.attempts+1
+ returning attempts into v_count;
+ return v_count<=5;
+end;
+$$;
+revoke all on function public.instant_claim_lead(text) from public,anon,authenticated;
+grant execute on function public.instant_claim_lead(text) to service_role;
