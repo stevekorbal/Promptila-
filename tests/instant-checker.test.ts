@@ -86,6 +86,7 @@ test('robots rules support wildcards, end anchors, specific groups and allow tie
  assert.equal(robotsPermission(robots,'GPTBot','/secure/hidden'),'blocked');
  assert.equal(robotsPermission(robots,'GPTBot','/secure/help'),'allowed');
  assert.equal(robotsPermission(robots,'GPTBot','/private/file'),'allowed');
+ assert.equal(robotsPermission('User-agent: *\\nDisallow: *.data$\\nDisallow: */account','GPTBot','/'),'allowed');
 });
 test('HTML parser reads meaningful metadata, JSON-LD and headings without running scripts',()=>{
  const sample='<html><head><title>Example Service Company</title><meta name="description" content="We offer heating, cooling and repair services for regional homeowners."/><script type="application/ld+json">{"@type":"LocalBusiness","name":"Example Service","url":"https://example.com","description":"We provide heating and cooling services to residential customers."}</script></head><body><h1>Trusted Heating Services</h1><a href="/about">About</a><p>Homeowners choose our services for dependable work.</p></body></html>';
