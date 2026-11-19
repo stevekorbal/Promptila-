@@ -1,0 +1,25 @@
+name: Instant Checker Private Verification
+on:
+  push:
+    branches:
+      - feature/instant-ai-checker-phase1-private
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies for isolated validation
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run deterministic zero-network scanner tests
+        run: node --import tsx --test tests/instantChecker.test.ts
+      - name: Check TypeScript
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
