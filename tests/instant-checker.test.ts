@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateWebsite,publicIPv4,calculate,type Check} from '../api/_lib/instant-checker.ts';
+import {validateWebsite,publicIPv4,calculate,scanWebsite,type Check} from '../api/_lib/instant-checker.ts';
 const allocations:Record<string,[string,number][]>={
  'AI crawler access':[['A1',5],['A2',5],['A3',5],['A4',5],['A5',5]],
  'Structured data':[['B1',5],['B2',5],['B3',5],['B4',5]],
@@ -35,4 +35,35 @@ test('URL parser rejects unsafe host, port, credentials, query, fragment',()=>{
   assert.throws(()=>validateWebsite(raw),undefined,raw);
  }
  assert.equal(validateWebsite('www.example.com').hostname,'www.example.com');
+});
+
+function fixture(body:string,type='text/html',status=200,url='https://example.com/'){
+ return {body,type,status,url,bytes:body.length,headers:{'x-robots-tag':'','content-type':type}};
+}
+test('JS application shell keeps unreadable evidence unverified and has no score',async()=>{
+ const html='<html><head><title>Example Plumbing Services</title><script src="/a.js"></script><script src="/b.js"></script></head><body><div id="root"></div></body></html>';
+ const result=await scanWebsite('example.com',async u=>{
+  if(u.pathname==='/robots.txt')return fixture('', 'text/plain',404,u.href);
+  if(u.pathname==='/llms.txt')return fixture('', 'text/plain',404,u.href);
+  return fixture(html,'text/html',200,u.href);
+ });
+ assert.equal(result.js_dependent,true);
+ assert.equal(result.status,'incomplete');
+ assert.equal(result.score,null);
+ assert.equal(result.checks.find(x=>x.id==='C3')?.status,'unverified');
+ assert.equal(result.checks.find(x=>x.id==='D2')?.status,'unverified');
+});
+test('ordinary HTML website can be scored with no paid calls',async()=>{
+ const html='<html><head><title>Example Plumbing Services in Michigan</title><meta name="description" content="Example Plumbing provides professional plumbing and drain services to Michigan customers and families."><link rel="canonical" href="https://example.com/"><script type="application/ld+json">{"@context":"https://schema.org","@type":"LocalBusiness","name":"Example Plumbing","url":"https://example.com/"}</script></head><body><main><h1>Example Plumbing Services in Michigan</h1><h2>Services</h2><p>'+('Example Plumbing repair and maintenance services for customers. ').repeat(12)+'</p><a href="/about">About our company</a></main></body></html>';
+ const fetcher=async(u:URL)=>{
+  if(u.pathname==='/robots.txt')return fixture('', 'text/plain',404,u.href);
+  if(u.pathname==='/llms.txt')return fixture('', 'text/plain',404,u.href);
+  if(u.pathname==='/about')return fixture('<html><h1>About Example Plumbing</h1></html>','text/html',200,u.href);
+  return fixture(html,'text/html',200,u.href);
+ };
+ const result=await scanWebsite('https://example.com',fetcher);
+ assert.equal(result.status,'complete');
+ assert.ok(typeof result.score==='number');
+ assert.equal(result.engines.ChatGPT!==null,true);
+ assert.equal(result.checks.find(x=>x.id==='E1')?.status,'fail');
 });
