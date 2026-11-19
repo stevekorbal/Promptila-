@@ -14,7 +14,7 @@ export function ScanDisplay({scan}:{scan:Scan}){
    <p className="mt-3 text-xs text-slate-500">Scanned {new Date(scan.scanned_at).toLocaleString()} · {((scan.duration_ms||0)/1000).toFixed(1)}s · website signals only</p>
   </section>
   <section className="grid gap-4 md:grid-cols-2">
-   {Object.entries(cats).map(([key,label])=>{const c=scan.categories[key];return <article key={key} className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex justify-between gap-2"><strong className="text-slate-900">{label}</strong><span className="text-sm font-bold text-indigo-700">{c?c.earned:'—'} / {c?.max||'—'}</span></div>{c?.unverified>0&&<p className="mt-2 text-xs text-amber-700">{c.unverified} points unverified — not counted as failures</p>}</article>;})}
+   {Object.entries(cats).map(([key,label])=>{const c=scan.categories[key];return <article key={key} className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex justify-between gap-2"><strong className="text-slate-900">{label}</strong><span className="text-sm font-bold text-indigo-700">{c?(c.unverified>0?'Partial '+c.earned+' / '+c.max:c.earned+' / '+c.max):'—'}</span></div>{c?.unverified>0&&<p className="mt-2 text-xs text-amber-700">{c.unverified} points unverified — not counted as failures</p>}</article>;})}
   </section>
   <section className="rounded-2xl border border-slate-200 bg-white p-6">
    <h2 className="text-xl font-bold">Estimated AI-engine readiness</h2>
