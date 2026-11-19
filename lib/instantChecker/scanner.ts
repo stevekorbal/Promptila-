@@ -24,19 +24,20 @@ function ldObjects(html:string){const result:any[]=[];let invalid=false;for(cons
 function hasType(objs:any[],type:string):boolean{for(const o of objs){if(!o||typeof o!=='object')continue;const t=o['@type'];if((Array.isArray(t)?t:[t]).some((v:any)=>String(v||'').toLowerCase().includes(type.toLowerCase())))return true;if(Array.isArray(o['@graph'])&&hasType(o['@graph'],type))return true;}return false;}
 function getAny(objs:any[],property:string):boolean{return objs.some(o=>!!o?.[property]||(Array.isArray(o?.['@graph'])&&getAny(o['@graph'],property)));}
 function jsShell(html:string,content:string){return (content.length<250&&(/id=["'](?:root|app|__next)["']|data-reactroot|__nuxt|ng-version/i.test(html)||/<script\b/gi.test(html)))||(/enable javascript|loading application/i.test(content.slice(0,300))&&content.length<500));}
-type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number};
+type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number;indexHeader:string};
 async function safeFetch(url:string,signal?:AbortSignal):Promise<FetchResult>{
  try{
   const res=await guardedFetch(url,{method:'GET',redirect:'follow',maxRedirects:3,timeoutMs:5000,signal,opaqueErrors:true,blockedEncodings:['br'],headers:{'User-Agent':'PromptilaInstantChecker/1.0','Accept':'text/html,text/plain,application/xml;q=0.8,*/*;q=0.1'}});
   const ct=res.headers.get('content-type')||'';
-  if(res.status===404||res.status===410){await res.body?.cancel();return {kind:'missing',text:'',status:res.status,url:res.url,contentType:ct,bytes:0};}
+  if(res.status===404||res.status===410){await res.body?.cancel();return {kind:'missing',text:'',status:res.status,url:res.url,contentType:ct,bytes:0,indexHeader:res.headers.get('x-robots-tag')||''};}
   if(!res.ok){await res.body?.cancel();return {kind:'error',text:'',status:res.status,url:res.url,contentType:ct,bytes:0};}
   const body=await readBodyAsText(res,{maxResponseBytes:768*1024});
-  return {kind:'ok',text:body,status:res.status,url:res.url,contentType:ct,bytes:Buffer.byteLength(body)};
- }catch{return {kind:'error',text:'',status:0,url,contentType:'',bytes:0};}
+  return {kind:'ok',text:body,status:res.status,url:res.url,contentType:ct,bytes:Buffer.byteLength(body),indexHeader:res.headers.get('x-robots-tag')||''};
+ }catch{return {kind:'error',text:'',status:0,url,contentType:'',bytes:0,indexHeader:''};}
 }
 function robotAccess(r:FetchResult,agent:string):Verdict{
  if(r.kind==='missing')return 'pass';if(r.kind!=='ok')return 'unverified';
+ if(/<html|<!doctype/i.test(r.text)||(/text\/html/i.test(r.contentType)))return 'unverified';
  const groups:Array<{agents:string[];rules:{allow:boolean;path:string}[]}>=[];
  let current:{agents:string[];rules:{allow:boolean;path:string}[]}|null=null;let inRules=false;
  for(const line of r.text.split(/\r?\n/)){const x=line.split('#')[0].trim();const m=x.match(/^([\w-]+)\s*:\s*(.*)$/);if(!m)continue;const key=m[1].toLowerCase(),val=m[2].trim();
@@ -51,7 +52,7 @@ function robotAccess(r:FetchResult,agent:string):Verdict{
 export async function scanSite(input:string){
  const {host,url}=normalizeSite(input);const began=Date.now();
  const [home,robots,llms]=await Promise.all([safeFetch(url),safeFetch(url+'robots.txt'),safeFetch(url+'llms.txt')]);
- if(home.kind!=='ok'||!home.contentType.includes('html'))return {host,url,version:SCORING_VERSION,status:'incomplete',score:null,classification:null,categories:{},estimates:null,crawler:{},checks:[],summary:'The homepage could not be reliably inspected.',duration_ms:Date.now()-began,bytes:home.bytes+robots.bytes+llms.bytes,requests:3,scanned_at:new Date().toISOString()};
+ if(home.kind!=='ok'||!home.contentType.includes('html')||!['www.'+host,host,host.replace(/^www\./,'')].includes(new URL(home.url).hostname.toLowerCase()))return {host,url,version:SCORING_VERSION,status:'incomplete',score:null,classification:null,categories:{},estimates:null,crawler:{},checks:[],summary:'The homepage could not be reliably inspected.',duration_ms:Date.now()-began,bytes:home.bytes+robots.bytes+llms.bytes,requests:3,scanned_at:new Date().toISOString()};
  const html=home.text;const body=strip(html);const shell=jsShell(html,body);
  const title=textTag(html,'title'),description=meta(html,'description');
  const h1=[...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(x=>strip(x[1])).filter(Boolean);
@@ -79,7 +80,8 @@ export async function scanSite(input:string){
  add('semantic','C5','Readable homepage content',3,body.length>=350?'pass':unknown,'Initial HTML readable text length '+body.length);
  const brandFromTitle=title.split(/[|–—-]/)[0].trim(); const branded=brandFromTitle.length>=3&&brandFromTitle.length<=85;
  add('content','D1','Identifiable business/brand',4,branded?'pass':unknown,brandFromTitle||'Unable to extract business name');
- add('content','D2','Products/services described',4,allText.length>=600?'pass':unknown,'Readable content length '+allText.length+' (basic proxy; not AI semantic analysis)');
+ const serviceWords=/\b(?:services?|products?|we (?:offer|provide|sell|make)|shop|menu|repairs?|installation|plumbing|heating|candy|manufactur(?:ing|e)|specializ(?:e|ing)|our work)\b/i.test(allText);
+ add('content','D2','Products/services described',4,serviceWords&&allText.length>=250?'pass':allText.length>250?'unverified':unknown,serviceWords?'Relevant offerings wording detected':'Offering details could not be confidently verified');
  add('content','D3','Company/About content',4,hasAboutLink||candidates.some(c=>/about|company|story/i.test(c))?'pass':unknown,hasAboutLink?'About/company link located':'Not verified in fetched links');
  add('content','D4','Consistent visible brand',3,branded&&allText.toLowerCase().includes(brandFromTitle.toLowerCase())?'pass':unknown,'Title/visible-text brand comparison');
  const validLlms=llms.kind==='ok'&&/text\/plain|text\/markdown/i.test(llms.contentType)&&!/<html|<!doctype/i.test(llms.text)&&llms.text.length>20;
@@ -91,7 +93,8 @@ export async function scanSite(input:string){
  add('technical','F2','Homepage HTTP success',3,'pass','HTTP '+home.status);
  let canonicalOk=false;try{canonicalOk=!!canon&&new URL(canon,home.url).hostname===host;}catch{}
  add('technical','F3','Canonical URL',2,canonicalOk?'pass':'fail',canon||'No canonical');
- add('technical','F4','Homepage indexable',2,/noindex/i.test(meta(html,'robots'))?'fail':'pass',meta(html,'robots')||'No HTML noindex found; response headers not inspected');
+ const indexingSignals=[meta(html,'robots'),home.indexHeader].filter(Boolean).join(' | ');
+ add('technical','F4','No homepage noindex directive',2,/noindex/i.test(indexingSignals)?'fail':'pass',indexingSignals||'No HTML or HTTP noindex found');
  const categories:Record<string,{earned:number;max:number;unverified:number}>={};for(const [k,max] of Object.entries(WEIGHTS)){const v=ch.filter(c=>c.category===k);categories[k]={earned:v.filter(x=>x.verdict==='pass').reduce((s,x)=>s+x.points,0),max,unverified:v.filter(x=>x.verdict==='unverified').reduce((s,x)=>s+x.points,0)};}
  const provisional=ch.some(x=>x.verdict==='unverified')||rootJs;const score=provisional?null:ch.filter(c=>c.verdict==='pass').reduce((s,c)=>s+c.points,0);
  const estimates=score===null?null:Object.fromEntries(Object.entries(ENGINES).map(([engine,weights])=>[engine,Math.round(weights.reduce((s,w,i)=>s+w*categories[CATS[i]].earned/categories[CATS[i]].max,0))]));
