@@ -20,7 +20,7 @@ export function robotsPermission(body:string,agent:string,path='/'):RobotsVerdic
  const rules=matching.flatMap(x=>x.rules);
  const relevant:{rule:typeof rules[number];length:number}[]=[];
  for(const rule of rules){
-  if(!rule.pattern.startsWith('/')||/%(?![a-f\d]{2})/i.test(rule.pattern))return 'unverified';
+  if(!rule.pattern.startsWith('/')&&!rule.pattern.startsWith('*'))continue;
   const escaped=rule.pattern.replace(/[|\\{}()[\]^$+?.]/g,'\\$&').replace(/\*/g,'.*');
   const end=escaped.endsWith('\\$')?'$':'';
   const pat=end?escaped.slice(0,-2):escaped;
