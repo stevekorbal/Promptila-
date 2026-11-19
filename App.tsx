@@ -50,6 +50,7 @@ import CustomerDfy from './pages/customer/CustomerDfy.tsx';
 import CustomerMonitoring from './pages/customer/CustomerMonitoring.tsx';
 import CustomerAccount from './pages/customer/CustomerAccount.tsx';
 import NotFound from './pages/NotFound.tsx';
+import AIVisibilityChecker from './pages/AIVisibilityChecker.tsx';
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -104,6 +105,8 @@ const App: React.FC = () => {
             <Route path="/case-study/big-lake-candy" element={<CaseStudyBigLake />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/ai-visibility-checker" element={<AIVisibilityChecker />} />
+            <Route path="/ai-visibility-checker/report/:domain" element={<AIVisibilityChecker />} />
             <Route path="/checkout/account-setup" element={<PostPaymentAccount />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
