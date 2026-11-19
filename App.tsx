@@ -50,6 +50,8 @@ import CustomerDfy from './pages/customer/CustomerDfy.tsx';
 import CustomerMonitoring from './pages/customer/CustomerMonitoring.tsx';
 import CustomerAccount from './pages/customer/CustomerAccount.tsx';
 import NotFound from './pages/NotFound.tsx';
+import AIVisibilityChecker from './pages/AIVisibilityChecker.tsx';
+import AIVisibilityReport from './pages/AIVisibilityReport.tsx';
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -93,6 +95,8 @@ const App: React.FC = () => {
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/ai-visibility-checker" element={<AIVisibilityChecker />} />
+            <Route path="/ai-visibility-checker/report/:host" element={<AIVisibilityReport />} />
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/services" element={<Services />} />
             <Route path="/pricing" element={<Pricing />} />

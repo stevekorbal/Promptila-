@@ -1,0 +1,74 @@
+name: Instant Checker Private Verification
+on:
+  push:
+    branches:
+      - feature/instant-ai-checker-phase1-private
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  private-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: checker_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d checker_test"
+          --health-interval 3s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies for isolated validation
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Validate new SQL schema in isolated PostgreSQL (not live Supabase)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d checker_test -v ON_ERROR_STOP=1 -c "create role anon; create role authenticated; create role service_role;"
+          psql -h localhost -U postgres -d checker_test -v ON_ERROR_STOP=1 -f docs/instant-checker-phase1.sql
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = claimed
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = busy
+          psql -h localhost -U postgres -d checker_test -c "update public.instant_scans set status='complete',public_result='{}',expires_at=now()+interval '7 days' where host='example.com'"
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = cached
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select has_table_privilege('anon','public.instant_scan_leads','SELECT')")" = f
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select has_table_privilege('anon','public.instant_scans','SELECT')")" = f
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select has_function_privilege('anon','public.consume_instant_lead_quota(text)','EXECUTE')")" = f
+          for n in 1 2 3 4 5; do test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.consume_instant_lead_quota(repeat('b',64))")" = t; done
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.consume_instant_lead_quota(repeat('b',64))")" = f
+      - name: Run deterministic zero-network scanner tests
+        run: node --import tsx --test tests/instantChecker.test.ts
+      - name: Controlled four-site live scan (one explicitly marked push)
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[live-smoke]')
+        env:
+          RUN_LIVE_SMOKE: '1'
+        run: node --import tsx tests/instantChecker.smoke.ts
+      - name: Private UI screenshot test (mocked API, one marked push)
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[visual-qa]')
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+          npm run dev > /tmp/promptila-vite.log 2>&1 &
+          for n in $(seq 1 30); do if curl -fsS http://127.0.0.1:3000/ai-visibility-checker >/dev/null; then break; fi; sleep 1; done
+          node tests/screenshot-checker.mjs
+      - name: Upload fixture-based UI screenshots
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[visual-qa]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptila-instant-checker-ui-fixtures
+          path: screenshots/*.png
+          retention-days: 14
+      - name: Check TypeScript
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
