@@ -17,11 +17,11 @@ const MAX_BYTES=650_000;
 const deadlineMs=23000;
 
 export function validateWebsite(raw: unknown): URL {
-  if (typeof raw!=='string'||raw.length>2048||/[\\\s\\x00-\\x1F]/.test(raw)) throw Error('Enter a valid website URL.');
-  const provided=/^https?:\\/\\//i.test(raw)?raw:'https://'+raw;
+  if (typeof raw!=='string'||raw.length>2048||/[\\s\x00-\x1F]/.test(raw)) throw Error('Enter a valid website URL.');
+  const provided=/^https?:\/\//i.test(raw)?raw:'https://'+raw;
   const url=new URL(provided);
   if (!['https:','http:'].includes(url.protocol)||url.username||url.password||url.port||url.hash||url.search) throw Error('Only public website homepages are accepted.');
-  const hostname=url.hostname.toLowerCase().replace(/\\.$/,'');
+  const hostname=url.hostname.toLowerCase().replace(/\.$/,'');
   if (isIP(hostname)||hostname==='localhost'||!hostname.includes('.')||hostname.endsWith('.local')||hostname.endsWith('.internal')||hostname.length>253||!/^[a-z0-9.-]+$/.test(hostname)) throw Error('A public DNS hostname is required.');
   if (hostname.split('.').some(label=>!label||label.length>63||label.startsWith('-')||label.endsWith('-'))) throw Error('Invalid hostname.');
   url.hostname=hostname;url.pathname='/';url.search='';url.hash='';
@@ -85,28 +85,33 @@ const groups=[
  ['Technical health',10]
 ] as const;
 const W:Record<string,number[]>={ChatGPT:[30,20,15,20,5,10],Gemini:[25,20,20,20,5,10],Claude:[30,15,20,20,5,10],Perplexity:[30,15,20,20,5,10]};
-function clean(s:string){return s.replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi,' ').replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&(?:nbsp|amp|quot|lt|gt);/g,' ').replace(/\\s+/g,' ').trim()}
-function getMeta(html:string,name:string){const tags=html.match(/<meta\\b[^>]*>/gi)||[];return tags.find(x=>new RegExp('(?:name|property)\\s*=\\s*["\\\']'+name+'["\\\']','i').test(x))?.match(/content\\s*=\\s*["']([^"']*)/i)?.[1]||''}
-function robotsPermit(raw:string,agent:string,path='/'):Verdict{
-  // Applies longest matching user agent group; then longest matching path rule.
-  if(!raw)return 'pass';
-  const blocks:{agents:string[];rules:{allow:boolean;path:string}[]}[]=[];
-  let current:{agents:string[];rules:{allow:boolean;path:string}[]}|null=null;
-  for(const original of raw.split(/\\r?\\n/)){
-    const line=original.split('#')[0].trim();const m=/^(user-agent|allow|disallow)\\s*:\\s*(.*)$/i.exec(line);if(!m)continue;
-    const key=m[1].toLowerCase(),val=m[2].trim();
-    if(key==='user-agent'){
-      if(!current||current.rules.length){current={agents:[],rules:[]};blocks.push(current);}
-      current.agents.push(val.toLowerCase());
-    }else if(current&&current.agents.length&&val){current.rules.push({allow:key==='allow',path:val});}
-  }
-  const candidates=blocks.map(b=>({b,match:b.agents.reduce((n,a)=>Math.max(n,a==='*'?1:agent.toLowerCase().includes(a)?a.length:0),0)})).filter(x=>x.match>0);
-  if(!candidates.length)return 'pass';
-  const maximum=Math.max(...candidates.map(x=>x.match));
-  const rules=candidates.filter(x=>x.match===maximum).flatMap(x=>x.b.rules)
-    .map(rule=>({...rule,length:rule.path.replace(/[*$]/g,'').length,pattern:new RegExp('^'+rule.path.replace(/[.+?^\\$()|[\\]{}]/g,'\\$&').replace(/\\*/g,'.*').replace(/\\$$/,'$'))}))
-    .filter(x=>x.pattern.test(path)).sort((a,b)=>b.length-a.length||Number(b.allow)-Number(a.allow));
-  return rules.length&&!rules[0].allow?'fail':'pass';
+function clean(s:string){return s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&(?:nbsp|amp|quot|lt|gt);/g,' ').replace(/\s+/g,' ').trim()}
+function getMeta(html:string,name:string){
+ const tags=html.match(/<meta\b[^>]*>/gi)||[];
+ const t=tags.find(x=>new RegExp('(?:name|property)\\s*=\\s*["\\\']'+name+'["\\\']','i').test(x));
+ return t?.match(/content\s*=\s*["']([^"']*)/i)?.[1]||'';
+}
+function robotsPermit(raw:string,agent:string,path='/'):Verdict {
+ const blocks:{agents:string[];rules:{allow:boolean;path:string}[]}[]=[];
+ let current:{agents:string[];rules:{allow:boolean;path:string}[]}|null=null;
+ for(const entry of raw.split(/\r?\n/)){
+  const line=entry.split('#')[0].trim(),match=/^(user-agent|allow|disallow)\s*:\s*(.*)$/i.exec(line);
+  if(!match)continue;
+  const type=match[1].toLowerCase(),value=match[2].trim();
+  if(type==='user-agent'){
+   if(!current||current.rules.length){current={agents:[],rules:[]};blocks.push(current);}
+   current.agents.push(value.toLowerCase());
+  }else if(current&&value)current.rules.push({allow:type==='allow',path:value});
+ }
+ const candidates=blocks.map(b=>({b,specificity:b.agents.reduce((n,v)=>Math.max(n,v==='*'?1:v===agent.toLowerCase()?v.length:0),0)})).filter(x=>x.specificity>0);
+ if(!candidates.length)return 'pass';
+ const max=Math.max(...candidates.map(x=>x.specificity));
+ const rules=candidates.filter(x=>x.specificity===max).flatMap(x=>x.b.rules);
+ // Unknown wildcard syntax never turns into an assumed permission.
+ if(rules.some(x=>x.path.includes('*')&&!x.path.startsWith('/')))return 'unverified';
+ const matched=rules.map(x=>({...x,prefix:x.path.split(/[*$]/)[0]}))
+  .filter(x=>x.prefix&&path.startsWith(x.prefix)).sort((x,y)=>y.prefix.length-x.prefix.length||Number(y.allow)-Number(x.allow));
+ return matched.length?(matched[0].allow?'pass':'fail'):'pass';
 }
 export function calculate(checks:Check[]):Score{
   const categories:Score['categories']={};let complete=true;let total=0;
@@ -144,21 +149,21 @@ export async function scanWebsite(raw:unknown){
   const available=!!homepage&&homepage.status>=200&&homepage.status<300&&homepage.type.includes('html');
   const html=available?homepage!.body:'';
   const text=clean(html);
-  const scripts=(html.match(/<script\\b/gi)||[]).length;
-  const appShell=available&&(text.length<260&&scripts>=2||/<div\\s+id=["'](?:root|app|__next)["']\\s*><\\/div>/i.test(html)&&text.length<500);
+  const scripts=(html.match(/<script\b/gi)||[]).length;
+  const appShell=available&&(text.length<260&&scripts>=2||/<div\s+id=["'](?:root|app|__next)["']\s*><\/div>/i.test(html)&&text.length<500);
   const readable=available&&!appShell;
-  const metaTitle=html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]?.trim()||'';
+  const metaTitle=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim()||'';
   const description=getMeta(html,'description');
-  const h1=(html.match(/<h1\\b[^>]*>/gi)||[]).length;
-  const headings=[...(html.matchAll(/<h([1-6])\\b[^>]*>/gi))].map(x=>Number(x[1]));
-  const matches=html.match(/<script[^>]+type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi)||[];
+  const h1=(html.match(/<h1\b[^>]*>/gi)||[]).length;
+  const headings=[...(html.matchAll(/<h([1-6])\b[^>]*>/gi))].map(x=>Number(x[1]));
+  const matches=html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)||[];
   let jsonld:unknown[]=[];let invalidJson=false;
-  for(const tag of matches){let m=/>(([\\s\\S]*))<\\/script>$/i.exec(tag);try{jsonld.push(JSON.parse(m?.[1]||''));}catch{invalidJson=true;}}
+  for(const tag of matches){let m=/>(([\s\S]*))<\/script>$/i.exec(tag);try{jsonld.push(JSON.parse(m?.[1]||''));}catch{invalidJson=true;}}
   const flat=JSON.stringify(jsonld).toLowerCase();
   const organizations=/organization|localbusiness|plumber|corporation|store/.test(flat);
-  const hasNameUrl=/"name"\\s*:\\s*"[^"]+"/i.test(JSON.stringify(jsonld))&&/"url"\\s*:\\s*"https?:/i.test(JSON.stringify(jsonld));
+  const hasNameUrl=/"name"\s*:\s*"[^"]+"/i.test(JSON.stringify(jsonld))&&/"url"\s*:\s*"https?:/i.test(JSON.stringify(jsonld));
   const htmlEvidence=available?'Initial HTML inspected':'Homepage HTML could not be fetched';
-  const robotsValid=robots&&robots.status===200&&!robots.type.includes('html')&&!/^\\s*</.test(robots.body);
+  const robotsValid=robots&&robots.status===200&&!robots.type.includes('html')&&!/^\s*</.test(robots.body);
   const robotsAbsent=robots&&[404,410].includes(robots.status);
   for(const [i,agent,label] of [['A1','GPTBot','ChatGPT / GPTBot'],['A2','ClaudeBot','Claude / ClaudeBot'],['A3','PerplexityBot','Perplexity / PerplexityBot'],['A4','Google-Extended','Gemini / Google-Extended']] as const){
     const status:Verdict=robotsValid?robotsPermit(robots!.body,agent):robotsAbsent?'pass':'unverified';
@@ -178,24 +183,24 @@ export async function scanWebsite(raw:unknown){
   const siteName=metaTitle.split(/[|–—-]/)[0]?.trim()||'';
   const brandKnown=siteName.length>=3&&!/^(home|welcome)$/i.test(siteName);
   const services=readable&&/(services|solutions|products|plumbing|heating|candy|repair|installation|what we do)/i.test(text.slice(0,4000));
-  const aboutPath=readable?html.match(/<a\\b[^>]*href=["']([^"']*(?:about|our-story)[^"']*)["'][^>]*>/i)?.[1]:null;
+  const aboutPath=readable?html.match(/<a\b[^>]*href=["']([^"']*(?:about|our-story)[^"']*)["'][^>]*>/i)?.[1]:null;
   if(aboutPath){try{const candidate=new URL(aboutPath,url);if(candidate.hostname===url.hostname&&candidate.pathname.length<160)about=await safeFetch(candidate,started).catch(()=>null);}catch{}}
   add('D1','Content and entity signals','Brand identifiable',4,!available?'unverified':brandKnown?'pass':'fail',siteName||htmlEvidence);
   add('D2','Content and entity signals','Products or services identifiable',4,!readable?'unverified':services?'pass':'fail',readable?'Readable homepage checked':'Content depends on JavaScript or is unavailable');
   add('D3','Content and entity signals','About or company information',4,!readable?'unverified':!aboutPath?'fail':!about?'unverified':about.status===200?'pass':'fail',aboutPath?'About link checked':'No About link found in initial HTML');
   add('D4','Content and entity signals','Consistent brand signals',3,!readable?'unverified':brandKnown&&text.toLowerCase().includes(siteName.toLowerCase())?'pass':'fail',readable?'Title and text compared':'Rendered text unavailable');
-  const validLlms=!!llms&&llms.status===200&&!llms.type.includes('html')&&!/^\\s*</.test(llms.body)&&llms.body.trim().length>0;
+  const validLlms=!!llms&&llms.status===200&&!llms.type.includes('html')&&!/^\s*</.test(llms.body)&&llms.body.trim().length>0;
   const absentLlms=!!llms&&[404,410].includes(llms.status);
   const llmsVerdict=(pass:boolean):Verdict=>validLlms?(pass?'pass':'fail'):absentLlms?'fail':'unverified';
   add('E1','llms.txt','Valid llms.txt text document',5,llmsVerdict(true),validLlms?'Text document returned':absentLlms?'File not found':'File response could not be verified');
   add('E2','llms.txt','Meaningful site description',3,llmsVerdict(!!llms&&clean(llms.body).length>=50),validLlms?'Text checked':'No verified text document');
-  add('E3','llms.txt','Links to site resources',2,llmsVerdict(!!llms&&/https?:\\/\\/[^\\s)]+/.test(llms.body)),validLlms?'Links checked':'No verified text document');
+  add('E3','llms.txt','Links to site resources',2,llmsVerdict(!!llms&&/https?:\/\/[^\s)]+/.test(llms.body)),validLlms?'Links checked':'No verified text document');
   add('F1','Technical health','Valid HTTPS response',3,url.protocol==='https:'?(homepage?'pass':'unverified'):'fail',url.protocol==='https:'?'HTTPS requested with certificate verification':'HTTP URL supplied');
   add('F2','Technical health','Successful homepage response',3,homepage?homepage.status===200?'pass':homepage.status===404||homepage.status===410?'fail':'unverified':'unverified',homepage?'HTTP '+homepage.status:'Could not fetch homepage');
-  const canonical=html.match(/<link\\b(?=[^>]*rel=["']canonical["'])[^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]||'';
+  const canonical=html.match(/<link\b(?=[^>]*rel=["']canonical["'])[^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]||'';
   let canonicalValid=false;try{canonicalValid=Boolean(canonical&&new URL(canonical,url).hostname===url.hostname);}catch{}
   add('F3','Technical health','Valid canonical URL',2,!available?'unverified':canonicalValid?'pass':'fail',canonical||'No canonical in initial HTML');
-  const noindex=/<meta\\b[^>]*name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(html)||/noindex/i.test(homepage?.headers['x-robots-tag']||'');
+  const noindex=/<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(html)||/noindex/i.test(homepage?.headers['x-robots-tag']||'');
   add('F4','Technical health','Homepage indexability signals',2,!available?'unverified':noindex?'fail':'pass',noindex?'Noindex directive found':htmlEvidence);
   const score=calculate(checks);
   return {domain:url.hostname,url:url.href,scanned_at:new Date().toISOString(),elapsed_ms:Math.round(performance.now()-started),bytes_fetched:[homepage,robots,llms,about].reduce((n,x)=>n+(x?.bytes||0),0),request_count:3+(about?1:0),js_dependent:appShell,checks,...score,version:'instant-v1.0',disclaimer:'Website-signal readiness estimates only. No AI models were queried. These do not measure actual AI recommendations or rankings.',llms_note:'llms.txt is voluntary and is not a requirement or guarantee for AI recommendations.'};
