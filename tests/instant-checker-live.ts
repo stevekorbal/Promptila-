@@ -45,6 +45,7 @@ for(const site of sites){
   const record={site:site.name,domain:r.domain,status:r.status,score:r.score,js_dependent:r.js_dependent,
    elapsed_ms:r.elapsed_ms,request_count:r.request_count,bytes_fetched:r.bytes_fetched,
    checked:r.checks.length,unverified:r.checks.filter(c=>c.status==='unverified').map(c=>c.id),
+   wire_bytes:r.wire_bytes,robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,network_errors:r.network_errors,
    category_scores:r.categories,engine_estimates:r.engines,check_results:r.checks,fetch_events:fetchEvents};
   results.push(record);
   console.log('SITE_QA',JSON.stringify({site:site.name,status:r.status,score:r.score,js:r.js_dependent,elapsed_ms:r.elapsed_ms,unverified:record.unverified,fetch_events:fetchEvents}));
