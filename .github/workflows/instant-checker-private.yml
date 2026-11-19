@@ -4,6 +4,8 @@ on:
     branches:
       - feature/instant-ai-checker-phase1-private
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
