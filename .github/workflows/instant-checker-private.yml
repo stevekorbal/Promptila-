@@ -12,6 +12,18 @@ jobs:
   private-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: checker_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d checker_test"
+          --health-interval 3s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +31,17 @@ jobs:
           node-version: '22'
       - name: Install dependencies for isolated validation
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Validate new SQL schema in isolated PostgreSQL (not live Supabase)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d checker_test -v ON_ERROR_STOP=1 -c "create role anon; create role authenticated; create role service_role;"
+          psql -h localhost -U postgres -d checker_test -v ON_ERROR_STOP=1 -f docs/instant-checker-phase1.sql
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = claimed
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = busy
+          psql -h localhost -U postgres -d checker_test -c "update public.instant_scans set status='complete',public_result='{}',expires_at=now()+interval '7 days' where host='example.com'"
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select public.claim_instant_scan('example.com','https://example.com/',repeat('a',64))")" = cached
+          test "$(psql -h localhost -U postgres -d checker_test -At -c "select has_table_privilege('anon','public.instant_scan_leads','SELECT')")" = f
       - name: Run deterministic zero-network scanner tests
         run: node --import tsx --test tests/instantChecker.test.ts
       - name: Controlled four-site live scan (one explicitly marked push)
