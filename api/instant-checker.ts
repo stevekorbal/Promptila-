@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { scanWebsite,validateWebsite } from './_lib/instant-checker.ts';
 export const config={maxDuration:60};
 function database(){
- const url=(process.env.SUPABASE_URL||'').replace(/\\/rest\\/v1\\/?$/,'').replace(/\\/$/,'');
+ const url=(process.env.SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)throw Error('Service not configured');
  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
