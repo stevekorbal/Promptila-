@@ -1,5 +1,5 @@
 import type {VercelRequest,VercelResponse} from '@vercel/node';
-import {admitted,db} from './_lib/instant.ts';
+import {admitted,db,clientHash} from './_lib/instant.ts';
 function clean(v:unknown,max:number){return typeof v==='string'?v.trim().replace(/[\u0000-\u001f]/g,'').slice(0,max+1):'';}
 export default async function handler(req:VercelRequest,res:VercelResponse){
  if(!admitted(req,res))return;
@@ -12,6 +12,9 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const {host}=normalizeSite(website);const client=db();
   const {data:scan,error:e}=await client.from('instant_scans').select('id,status').eq('host',host).maybeSingle();
   if(e)throw e;if(!scan||!['complete','incomplete'].includes(scan.status))return res.status(400).json({error:'A completed or provisional website scan is required first'});
+  const {data:allowed,error:quotaError}=await client.rpc('consume_instant_lead_quota',{p_ip_hash:clientHash(req)});
+  if(quotaError)throw quotaError;
+  if(!allowed)return res.status(429).json({error:'Too many requests. Try again later.'});
   const {error}=await client.from('instant_scan_leads').insert({scan_id:scan.id,full_name:name,business_email:email,company_name:company,job_role:role,consent_at:new Date().toISOString()});
   if(error&&error.code!=='23505')throw error;
   return res.status(200).json({ok:true,message:'Your request was received. A complete fix plan is not included in this phase.'});
