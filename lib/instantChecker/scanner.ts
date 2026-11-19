@@ -23,7 +23,11 @@ function canonical(html:string){for(const m of html.matchAll(/<link\b[^>]*>/gi))
 function ldObjects(html:string){const result:any[]=[];let invalid=false;for(const m of html.matchAll(/<script\b(?=[^>]*\btype\s*=\s*["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi)){try{const obj=JSON.parse(m[1]);result.push(...(Array.isArray(obj)?obj:[obj]));}catch{invalid=true;}}return {result,invalid};}
 function hasType(objs:any[],type:string):boolean{for(const o of objs){if(!o||typeof o!=='object')continue;const t=o['@type'];if((Array.isArray(t)?t:[t]).some((v:any)=>String(v||'').toLowerCase().includes(type.toLowerCase())))return true;if(Array.isArray(o['@graph'])&&hasType(o['@graph'],type))return true;}return false;}
 function getAny(objs:any[],property:string):boolean{return objs.some(o=>!!o?.[property]||(Array.isArray(o?.['@graph'])&&getAny(o['@graph'],property)));}
-function jsShell(html:string,content:string){return (content.length<250&&(/id=["'](?:root|app|__next)["']|data-reactroot|__nuxt|ng-version/i.test(html)||/<script\b/gi.test(html)))||(/enable javascript|loading application/i.test(content.slice(0,300))&&content.length<500);}
+function jsShell(html:string,content:string){
+ const appRoot=/id=["'](?:root|app|__next|__nuxt)["']|data-reactroot|ng-version/i.test(html);
+ const scripts=(html.match(/<script\b/gi)||[]).length;
+ return (content.length<250&&appRoot)||(content.length<110&&scripts>=3&&!/<main[\s>]/i.test(html))||(/enable javascript|loading application/i.test(content.slice(0,300))&&content.length<500);
+}
 export type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number;indexHeader:string};
 async function safeFetch(url:string,signal?:AbortSignal):Promise<FetchResult>{
  try{
