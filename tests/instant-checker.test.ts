@@ -80,7 +80,7 @@ test('public result allowlist never includes private lead or payment fields',()=
 });
 
 test('robots rules support wildcards, end anchors, specific groups and allow ties',()=>{
- const robots='User-agent: *\\nDisallow: /private/\\nAllow: /private/public/\\nUser-agent: GPTBot\\nDisallow: /secure/*\\nAllow: /secure/help$';
+ const robots='User-agent: *\nDisallow: /private/\nAllow: /private/public/\nUser-agent: GPTBot\nDisallow: /secure/*\nAllow: /secure/help$';
  assert.equal(robotsPermission(robots,'ClaudeBot','/private/file'),'blocked');
  assert.equal(robotsPermission(robots,'ClaudeBot','/private/public/a'),'allowed');
  assert.equal(robotsPermission(robots,'GPTBot','/secure/hidden'),'blocked');
