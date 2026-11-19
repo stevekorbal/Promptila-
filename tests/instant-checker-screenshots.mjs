@@ -4,7 +4,7 @@ const testData=JSON.parse(readFileSync('instant-checker-private-results.json','u
 const browser=await chromium.launch({headless:true});
 mkdirSync('qa-screenshots',{recursive:true});
 const defaults=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
-for(const [i,row] of testData.entries()){
+for(const [i,row] of testData.slice(0,6).entries()){
  if(row.error||!row.domain)continue;
  const report={
   domain:row.domain,url:'https://'+row.domain,scanned_at:new Date().toISOString(),
