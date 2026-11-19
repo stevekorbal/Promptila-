@@ -59,7 +59,7 @@ test('ordinary HTML website can be scored with no paid calls',async()=>{
  const fetcher=async(u:URL)=>{
   if(u.pathname==='/robots.txt')return fixture('', 'text/plain',404,u.href);
   if(u.pathname==='/llms.txt')return fixture('', 'text/plain',404,u.href);
-  if(u.pathname==='/about')return fixture('<html><h1>About Example Plumbing</h1></html>','text/html',200,u.href);
+  if(u.pathname==='/about')return fixture('<html><h1>About Example Plumbing</h1><p>'+('Example Plumbing has licensed technicians, a locally owned business, and dedicated customer service. ').repeat(5)+'</p></html>','text/html',200,u.href);
   return fixture(html,'text/html',200,u.href);
  };
  const result=await scanWebsite('https://example.com',fetcher);
