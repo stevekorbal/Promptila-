@@ -75,3 +75,20 @@ end;
 $$;
 revoke all on function public.claim_instant_scan(text,text,text) from public,anon,authenticated;
 grant execute on function public.claim_instant_scan(text,text,text) to service_role;
+
+-- Lead intake uses the same isolated quota table, with an atomic per-IP hourly ceiling.
+create or replace function public.consume_instant_lead_quota(p_ip_hash text)
+returns boolean language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_count integer;
+begin
+ if p_ip_hash is null or p_ip_hash !~ '^[a-f0-9]{64}$' then return false; end if;
+ insert into public.instant_scan_limits(limiter_key,bucket,count)
+ values('lead:'||p_ip_hash,to_char(now() at time zone 'UTC','YYYYMMDDHH24'),1)
+ on conflict(limiter_key,bucket) do update
+ set count=instant_scan_limits.count+1,updated_at=now()
+ returning count into v_count;
+ return v_count<=5;
+end;
+$$;
+revoke all on function public.consume_instant_lead_quota(text) from public,anon,authenticated;
+grant execute on function public.consume_instant_lead_quota(text) to service_role;
