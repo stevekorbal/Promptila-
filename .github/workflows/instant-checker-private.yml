@@ -21,6 +21,11 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Run deterministic zero-network scanner tests
         run: node --import tsx --test tests/instantChecker.test.ts
+      - name: Controlled four-site live scan (one explicitly marked push)
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[live-smoke]')
+        env:
+          RUN_LIVE_SMOKE: '1'
+        run: node --import tsx tests/instantChecker.smoke.ts
       - name: Check TypeScript
         run: npm run lint
       - name: Build frontend
