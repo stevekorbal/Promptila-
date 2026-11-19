@@ -10,9 +10,10 @@ export default function handler(
 
   const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
 
-  if (!publishableKey) {
+  // Do not expose a live Stripe checkout during the prelaunch test period.
+  if (!publishableKey?.startsWith('pk_test_') || !process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')) {
     return res.status(500).json({
-      error: 'Stripe publishable key is not configured',
+      error: 'Checkout is disabled until both Stripe test keys are configured',
     });
   }
 
