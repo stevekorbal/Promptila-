@@ -9,7 +9,7 @@ function database(){
  if(!url||!key)throw Error('Service not configured');
  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
-function publicResult(row:any){
+export function publicResult(row:any){
  if(!row||!row.result)return null;
  const r=row.result;
  // Explicit allowlist. Never include private lead records, internal IDs or raw HTML.
