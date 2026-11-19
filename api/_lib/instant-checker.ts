@@ -17,7 +17,7 @@ const MAX_BYTES=650_000;
 const deadlineMs=23000;
 
 export function validateWebsite(raw: unknown): URL {
-  if (typeof raw!=='string'||raw.length>2048||/[\\s\x00-\x1F]/.test(raw)) throw Error('Enter a valid website URL.');
+  if (typeof raw!=='string'||raw.length>2048||/[\s\x00-\x1F]/.test(raw)) throw Error('Enter a valid website URL.');
   const provided=/^https?:\/\//i.test(raw)?raw:'https://'+raw;
   const url=new URL(provided);
   if (!['https:','http:'].includes(url.protocol)||url.username||url.password||url.port||url.hash||url.search) throw Error('Only public website homepages are accepted.');
