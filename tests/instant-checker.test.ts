@@ -1,5 +1,7 @@
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
+import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
+import { parseHtml } from '../api/_lib/instant-evidence.ts';
 import assert from 'node:assert/strict';
 import {validateWebsite,publicIPv4,calculate,scanWebsite,type Check} from '../api/_lib/instant-checker.ts';
 const allocations:Record<string,[string,number][]>={
@@ -75,4 +77,26 @@ test('public result allowlist never includes private lead or payment fields',()=
   payments:{secret:'private'},internal_report:{secret:'private'}}};
  const published=JSON.stringify(publicResult(row));
  for(const secret of ['PRIVATE','secret@example.com','999-9999','payments','internal_report'])assert.ok(!published.includes(secret),secret);
+});
+
+test('robots rules support wildcards, end anchors, specific groups and allow ties',()=>{
+ const robots='User-agent: *\\nDisallow: /private/\\nAllow: /private/public/\\nUser-agent: GPTBot\\nDisallow: /secure/*\\nAllow: /secure/help$';
+ assert.equal(robotsPermission(robots,'ClaudeBot','/private/file'),'blocked');
+ assert.equal(robotsPermission(robots,'ClaudeBot','/private/public/a'),'allowed');
+ assert.equal(robotsPermission(robots,'GPTBot','/secure/hidden'),'blocked');
+ assert.equal(robotsPermission(robots,'GPTBot','/secure/help'),'allowed');
+ assert.equal(robotsPermission(robots,'GPTBot','/private/file'),'allowed');
+});
+test('HTML parser reads meaningful metadata, JSON-LD and headings without running scripts',()=>{
+ const sample='<html><head><title>Example Service Company</title><meta name="description" content="We offer heating, cooling and repair services for regional homeowners."/><script type="application/ld+json">{"@type":"LocalBusiness","name":"Example Service","url":"https://example.com","description":"We provide heating and cooling services to residential customers."}</script></head><body><h1>Trusted Heating Services</h1><a href="/about">About</a><p>Homeowners choose our services for dependable work.</p></body></html>';
+ const p=parseHtml(sample);
+ assert.equal(p.title,'Example Service Company');
+ assert.equal(p.h1[0],'Trusted Heating Services');
+ assert.equal(p.schema.length,1);
+ assert.equal(p.aboutLinks[0],'/about');
+ assert.ok(p.text.includes('Homeowners'));
+});
+test('bot challenge is not a successful usable website response',()=>{
+ assert.equal(classifyProbe(200,'text/html','<html><h1>Just a moment</h1><p>Checking your browser</p></html>',false).status,'challenge');
+ assert.equal(classifyProbe(403,'text/html','Access denied',false).status,'blocked');
 });
