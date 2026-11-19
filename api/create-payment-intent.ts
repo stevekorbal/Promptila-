@@ -30,6 +30,7 @@ export function extractStripeMetadata(body: any): {
   audit_id: string;
   customer_email: string;
   customer_name: string;
+  customer_phone: string;
   business_name: string;
   website: string;
 } {
@@ -40,6 +41,7 @@ export function extractStripeMetadata(body: any): {
     body?.customer_name ??
     `${body?.firstName || ''} ${body?.lastName || ''}`.trim();
   const name = cleanMetaString(nameRaw, 200);
+  const customer_phone = cleanMetaString(body?.customer_phone ?? body?.phone ?? '', 50);
 
   const businessRaw = body?.business_name ?? body?.businessName ?? '';
   const business = cleanMetaString(businessRaw, 200);
@@ -57,6 +59,7 @@ export function extractStripeMetadata(body: any): {
     audit_id,
     customer_email: email,
     customer_name: name,
+    customer_phone,
     business_name: business,
     website,
   };
@@ -76,7 +79,11 @@ export default async function handler(
   const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!secretKey) {
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  // Test-only gate: refuse payment if either deployed Stripe credential is live/missing/mixed.
+  if (!secretKey?.startsWith('sk_test_') || !publishableKey?.startsWith('pk_test_')) {
+    return res.status(503).json({ error: 'Stripe test-mode credentials are required. Payment is disabled.' });
+  }
     return res.status(500).json({
       error: 'Stripe secret key is not configured',
     });
@@ -93,6 +100,10 @@ export default async function handler(
     if (metadata.service !== 'diy') {
       return res.status(400).json({ error: 'Only the DIY Blueprint is available for instant checkout.' });
     }
+    if (!metadata.customer_phone || metadata.customer_phone.replace(/\D/g, '').length < 7) {
+      return res.status(400).json({ error: 'Enter a valid phone number.' });
+    }
+    if (!metadata.customer_name) return res.status(400).json({ error: 'Enter the purchaser name.' });
     if (!metadata.customer_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(metadata.customer_email)) {
       return res.status(400).json({ error: 'Enter a valid email address.' });
     }
