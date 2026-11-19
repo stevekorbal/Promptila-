@@ -12,8 +12,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const {host}=normalizeSite(website);const client=db();
   const {data:scan,error:e}=await client.from('instant_scans').select('id,status').eq('host',host).maybeSingle();
   if(e)throw e;if(!scan||!['complete','incomplete'].includes(scan.status))return res.status(400).json({error:'A completed or provisional website scan is required first'});
-  const {error}=await client.from('instant_scan_leads').upsert({scan_id:scan.id,full_name:name,business_email:email,company_name:company,job_role:role,consent_at:new Date().toISOString()},{onConflict:'scan_id,business_email'});
-  if(error)throw error;
+  const {error}=await client.from('instant_scan_leads').insert({scan_id:scan.id,full_name:name,business_email:email,company_name:company,job_role:role,consent_at:new Date().toISOString()});
+  if(error&&error.code!=='23505')throw error;
   return res.status(200).json({ok:true,message:'Your request was received. A complete fix plan is not included in this phase.'});
  }catch(e:any){console.error('Instant lead submission failure',String(e?.message||e));return res.status(503).json({error:'Unable to save the request'});}
 }
