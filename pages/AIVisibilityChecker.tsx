@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {Globe,ShieldCheck,Search,Copy,CheckCircle2,AlertTriangle,Clock,ChevronDown} from 'lucide-react';
 type Check={id:string;category:string;label:string;points:number;status:'pass'|'fail'|'unverified';evidence:string};
-type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;disclaimer:string;llms_note:string};
+type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number}};
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
 const labels:{[key:string]:string}={pass:'Found',fail:'Needs attention',unverified:'Not verified'};
 const cats=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
@@ -82,6 +82,14 @@ export default function AIVisibilityChecker(){
      {report.js_dependent&&<p className="mt-4 bg-amber-50 text-amber-900 border border-amber-200 p-4 rounded-xl text-sm"><AlertTriangle className="inline mr-2" size={17}/>This site appears to load important content with JavaScript. Some content and structure checks are unverified rather than marked missing.</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
+     <h3 className="text-xl font-extrabold text-slate-900 mb-3">What we confirmed</h3>
+     {report.summary?<div className="grid sm:grid-cols-2 gap-5 text-sm">
+      <div><strong className="text-emerald-700">Verified strengths</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.strengths.length?report.summary.strengths.map(s=><li key={s}>{s}</li>):<li>No confirmed strengths available yet</li>}</ul></div>
+      <div><strong className="text-amber-800">Verified gaps</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.weaknesses.length?report.summary.weaknesses.map(s=><li key={s}>{s}</li>):<li>No confirmed gaps in inspected evidence</li>}</ul></div>
+     </div>:<p className="text-sm text-slate-500">See the website signals checklist below for confirmed findings.</p>}
+     {report.status==='incomplete'&&<p className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm text-amber-900 mt-4">This is an incomplete assessment. {report.summary?.unverified_count??report.checks.filter(c=>c.status==='unverified').length} checks were not verified. Verified findings are displayed below, but no final score was assigned.</p>}
+    </section>
+    <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-5">Six readiness categories</h3>
      <div className="grid sm:grid-cols-2 gap-4">
       {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4"><div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?.score===null?'Unverified':`${item.score}/${item.max}`}</span></div><p className="text-xs text-slate-500 mt-1">{item?.verified}/{item?.total} checks verified</p><div className="h-2 rounded-full bg-slate-200 mt-3 overflow-hidden"><div className="h-full bg-indigo-600" style={{width:`${item?.score===null?0:100*item.score/item.max}%`}}/></div></div>;})}
@@ -96,6 +104,8 @@ export default function AIVisibilityChecker(){
      <h4 className="font-semibold text-slate-900 mt-6 mb-2">Crawler permission signals</h4>
      <div className="grid sm:grid-cols-2 gap-2">{Object.entries(report.crawlerAccess).map(([name,status])=><div key={name} className="flex justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm"><span>{name}</span><strong>{status}</strong></div>)}</div>
      <p className="text-xs text-slate-500 mt-3">Google-Extended is a Google AI usage control, not a definitive Gemini crawler test.</p>
+     {report.robots_rules&&<details className="mt-5"><summary className="font-semibold text-slate-900 cursor-pointer">Seven crawler identities in robots.txt</summary><div className="mt-3 grid sm:grid-cols-2 gap-2">{Object.entries(report.robots_rules).map(([agent,permission])=><div key={agent} className="flex justify-between text-sm border rounded-lg px-3 py-2"><span>{agent}</span><strong>{permission}</strong></div>)}</div></details>}
+     {report.probes&&<div className="mt-5"><h4 className="font-semibold text-slate-900 mb-2">Live HTTP crawler user-agent probes</h4><p className="text-xs text-slate-500 mb-3">These are independent HTTP requests using crawler user-agent strings, not AI API requests. A successful response does not prove official crawler access.</p><div className="grid sm:grid-cols-2 gap-2">{Object.entries(report.probes).map(([name,probe])=><div key={name} className="border rounded-lg px-3 py-2 text-sm flex justify-between gap-2"><span>{name}</span><span className="text-right"><strong>{probe.status}</strong><span className="block text-xs text-slate-500">{probe.http_status??'No HTTP status'} · {probe.reason.replace(/_/g,' ')}</span></span></div>)}</div></div>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-2">Website signals checklist</h3>
