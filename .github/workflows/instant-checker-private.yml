@@ -53,6 +53,21 @@ jobs:
         env:
           RUN_LIVE_SMOKE: '1'
         run: node --import tsx tests/instantChecker.smoke.ts
+      - name: Private UI screenshot test (mocked API, one marked push)
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[visual-qa]')
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+          npm run dev > /tmp/promptila-vite.log 2>&1 &
+          for n in $(seq 1 30); do if curl -fsS http://127.0.0.1:3000/ai-visibility-checker >/dev/null; then break; fi; sleep 1; done
+          node tests/screenshot-checker.mjs
+      - name: Upload fixture-based UI screenshots
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[visual-qa]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptila-instant-checker-ui-fixtures
+          path: screenshots/*.png
+          retention-days: 14
       - name: Check TypeScript
         run: npm run lint
       - name: Build frontend
