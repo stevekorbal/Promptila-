@@ -37,7 +37,7 @@ export type PageResponse={
  decompressed_bytes?:number;truncated?:boolean;headers:Record<string,string>;
  reason?:string;redirects?:number;
 };
-export type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number};
+export type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAfterCapture?:boolean};
 export async function safeFetch(url:URL,start:number,redirects=0,options:FetchOptions={}):Promise<PageResponse>{
  if(redirects>3)throw Error('redirect_limit');
  if(performance.now()-start>(options.deadline??TOTAL_BUDGET))throw Error('scan_deadline');
@@ -81,7 +81,7 @@ export async function safeFetch(url:URL,start:number,redirects=0,options:FetchOp
    let wireBytes=0,inflatedBytes=0,capturedBytes=0,wasTruncated=false;
    const chunks:Buffer[]=[];
    const cap=Math.min(options.maxCapture??MAX_CAPTURE,MAX_CAPTURE);
-   let exceeded=false;
+   let exceeded=false,stoppedAtCapture=false;
    const wireMeter=new Transform({transform(chunk:Buffer,_enc,callback){
     wireBytes+=chunk.length;
     if(wireBytes>MAX_WIRE){exceeded=true;callback(Error('wire_limit'));return;}
@@ -95,14 +95,17 @@ export async function safeFetch(url:URL,start:number,redirects=0,options:FetchOp
      const kept=chunk.subarray(0,Math.min(available,chunk.length));
      chunks.push(kept);capturedBytes+=kept.length;
     }
-    if(inflatedBytes>cap)wasTruncated=true;
+    if(inflatedBytes>=cap){
+     wasTruncated=true;
+     if(options.stopAfterCapture){stoppedAtCapture=true;callback(Error('capture_limit'));return;}
+    }
     callback();
    }});
    try{
     if(unzip)await pipeline(res,wireMeter,unzip,sink);
     else await pipeline(res,wireMeter,sink);
    }catch(error:any){
-    if(!exceeded)return finish(()=>reject(Error('stream_error:'+String(error?.code||error?.message||'unknown').slice(0,80))));
+    if(!exceeded&&!stoppedAtCapture)return finish(()=>reject(Error('stream_error:'+String(error?.code||error?.message||'unknown').slice(0,80))));
     wasTruncated=true;
    }
    let body=Buffer.concat(chunks).toString('utf8');
