@@ -6,7 +6,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  if(req.method!=='GET')return res.status(405).end();
  try{
   const domain=validateWebsite(req.query.domain).hostname;
-  const url=(process.env.SUPABASE_URL||'').replace(/\\/rest\\/v1\\/?$/,'').replace(/\\/$/,'');
+  const url=(process.env.SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
   const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
   if(!url||!key)return res.status(503).end();
   const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
