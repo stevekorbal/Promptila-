@@ -52,3 +52,10 @@ test('cross-domain homepage redirects produce incomplete rather than misleading 
  const result=await scanSite('https://example.com',async url=>url==='https://example.com/'?ok('https://unrelated-site.com/',html):missing(url));
  assert.equal(result.status,'incomplete');assert.equal(result.score,null);
 });
+
+test('guarded fetch blocks private IP literals before connecting',async()=>{
+ const {guardedFetch}=await import('guarded-fetch');
+ for(const url of ['http://127.0.0.1:80/','http://169.254.169.254/latest/meta-data/','http://[::1]/']){
+  await assert.rejects(()=>guardedFetch(url,{timeoutMs:1000,opaqueErrors:true}));
+ }
+});
