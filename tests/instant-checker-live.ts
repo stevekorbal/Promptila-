@@ -15,7 +15,17 @@ const sites=[
  {name:'Best Buy',url:'https://www.bestbuy.com'},
  {name:'The Home Depot',url:'https://www.homedepot.com'},
  {name:'Shopify',url:'https://www.shopify.com'},
- {name:'HubSpot',url:'https://www.hubspot.com'}
+ {name:'HubSpot',url:'https://www.hubspot.com'},
+ {name:'Mr HVAC GR',url:'https://www.mrhvacgr.com'},
+ {name:'J and L Heating',url:'https://www.jandlheating.com'},
+ {name:'C and K Heating',url:'https://www.ckheatingcooling.com'},
+ {name:'Practical Mechanical',url:'https://www.practicalmechanical.com'},
+ {name:'Associated Plumbing',url:'https://associatedplumbing.com'},
+ {name:'Mitch the Plumber',url:'https://www.mitchtheplumber-mi.com'},
+ {name:'Simple Grains Bakery',url:'https://www.simplegrainsbakery.com'},
+ {name:'Warm Crumb Bakery',url:'https://www.warmcrumbbakery.com'},
+ {name:'Becks Bakery',url:'https://becks-bakery.com'},
+ {name:'Valentine Sweets',url:'https://valentinesweets.com'}
 ];
 const results:any[]=[];
 for(const site of sites){
