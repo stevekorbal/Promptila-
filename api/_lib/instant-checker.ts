@@ -80,7 +80,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   try{target=new URL(path,url);}catch{errors[path]='invalid_url';return null;}
   const key=path+(agent?'#'+agent:'');
   try{
-   const page=await fetcher(target,started,0,agent?{userAgent:agent,maxCapture:300_000,deadline:23_000}:undefined);
+   const page=await fetcher(target,started,0,agent?{userAgent:agent,maxCapture:120_000,deadline:23_000,stopAfterCapture:true}:undefined);
    networkEvents.push({path,user_agent:agent||'Promptila',status:page.status,reason:page.reason,
     wire_bytes:page.wire_bytes??page.bytes,decompressed_bytes:page.decompressed_bytes??page.bytes,truncated:!!page.truncated});
    return page;
