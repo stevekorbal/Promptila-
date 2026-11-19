@@ -27,7 +27,7 @@ function jsShell(html:string,content:string){return (content.length<250&&(/id=["
 export type FetchResult={kind:'ok'|'missing'|'error';text:string;status:number;url:string;contentType:string;bytes:number;indexHeader:string};
 async function safeFetch(url:string,signal?:AbortSignal):Promise<FetchResult>{
  try{
-  const res=await guardedFetch(url,{method:'GET',maxRedirects:3,timeoutMs:5000,signal,opaqueErrors:true,blockedEncodings:['br'],headers:{'User-Agent':'PromptilaInstantChecker/1.0','Accept':'text/html,text/plain,application/xml;q=0.8,*/*;q=0.1'}});
+  const res=await guardedFetch(url,{method:'GET',maxRedirects:3,timeoutMs:5000,signal,opaqueErrors:true,headers:{'User-Agent':'PromptilaInstantChecker/1.0','Accept':'text/html,text/plain,application/xml;q=0.8,*/*;q=0.1'}});
   const ct=res.headers.get('content-type')||'';
   if(res.status===404||res.status===410){await res.body?.cancel();return {kind:'missing',text:'',status:res.status,url:res.url,contentType:ct,bytes:0,indexHeader:res.headers.get('x-robots-tag')||''};}
   if(!res.ok){await res.body?.cancel();return {kind:'error',text:'',status:res.status,url:res.url,contentType:ct,bytes:0,indexHeader:res.headers.get('x-robots-tag')||''};}
