@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { publicResult } from '../api/instant-checker.ts';
 import assert from 'node:assert/strict';
 import {validateWebsite,publicIPv4,calculate,scanWebsite,type Check} from '../api/_lib/instant-checker.ts';
 const allocations:Record<string,[string,number][]>={
@@ -66,4 +67,12 @@ test('ordinary HTML website can be scored with no paid calls',async()=>{
  assert.ok(typeof result.score==='number');
  assert.equal(result.engines.ChatGPT!==null,true);
  assert.equal(result.checks.find(x=>x.id==='E1')?.status,'fail');
+});
+
+test('public result allowlist never includes private lead or payment fields',()=>{
+ const row={result:{domain:'example.com',score:80,status:'complete',checks:[],categories:{},engines:{},
+  customer_name:'PRIVATE',business_email:'secret@example.com',phone:'999-9999',
+  payments:{secret:'private'},internal_report:{secret:'private'}}};
+ const published=JSON.stringify(publicResult(row));
+ for(const secret of ['PRIVATE','secret@example.com','999-9999','payments','internal_report'])assert.ok(!published.includes(secret),secret);
 });
