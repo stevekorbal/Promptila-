@@ -54,7 +54,7 @@ function usableHtml(page:PageResponse|null):page is PageResponse{
 function safeSameSite(candidate:string,base:URL):URL|null{
  try{
   const u=new URL(candidate,base);
-  if(u.hostname!==base.hostname||u.port||u.username||u.password||u.search||u.hash||u.pathname.length>130)return null;
+  if(u.hostname.replace(/^www\./,'')!==base.hostname.replace(/^www\./,'')||u.port||u.username||u.password||u.search||u.hash||u.pathname.length>130)return null;
   if(!['http:','https:'].includes(u.protocol))return null;
   return u;
  }catch{return null;}
@@ -106,12 +106,14 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer
  const bodyReadable=rawEvidence.text.length>=300||rawEvidence.appData.join(' ').length>=300;
  const jsDependent=rawEvidence.jsShell||(htmlAvailable&&!bodyReadable&&(home?.body.match(/<script\b/gi)||[]).length>=2);
  let rendered:RenderedPage|null=null;
+ let activeBrowserRenderer:RenderCallback|undefined;
  let rendering:'not_needed'|'disabled'|'complete'|'failed'=jsDependent?'disabled':'not_needed';
  if(jsDependent&&htmlAvailable){
   let activeRenderer=renderer;
   if(!activeRenderer&&process.env.INSTANT_RENDER_FALLBACK==='true'){
    try{activeRenderer=(await import('./instant-render.ts')).renderJavaScriptPage;}catch{activeRenderer=undefined;}
   }
+  activeBrowserRenderer=activeRenderer;
   if(activeRenderer){
    try{rendered=await activeRenderer(url,fetcher,started);}catch{rendered=null;}
    rendering=rendered?.complete?'complete':'failed';
@@ -211,7 +213,16 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer
  let about:PageResponse|null=null;
  if(candidate)about=await fetchOne(candidate.pathname);
  const aboutData=usableHtml(about)?parseHtml(about.body,!!about.truncated):null;
- const aboutConfirmed=!!aboutData&&aboutData.text.length>=100;
+ let aboutConfirmed=!!aboutData&&aboutData.text.length>=100;
+ let renderedAbout:RenderedPage|null=null;
+ // At most one additional same-site browser page; only if raw About evidence
+ // is insufficient. This preserves the existing About-page scoring rule.
+ if(!aboutConfirmed&&candidate&&renderedEvidence&&activeBrowserRenderer&&
+    performance.now()-started<13_000){
+  try{renderedAbout=await activeBrowserRenderer(candidate,fetcher,started);}
+  catch{renderedAbout=null;}
+  if(renderedAbout?.complete)aboutConfirmed=parseHtml(renderedAbout.html,false).text.length>=100;
+ }
  add('D1','Content and entity signals','Brand identifiable',4,
   strongBrand?'pass':contentMissing(false),strongBrand||'Business identity not verified');
  add('D2','Content and entity signals','Products or services identifiable',4,
@@ -275,10 +286,10 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer
  return {
   domain:url.hostname,url:url.href,scanned_at:new Date().toISOString(),
   elapsed_ms:Math.round(performance.now()-started),
-  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0)+(rendered?.bytes||0),
+  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0)+(rendered?.bytes||0)+(renderedAbout?.bytes||0),
   wire_bytes:networkEvents.reduce((n,x)=>n+(x.wire_bytes||0),0),
-  request_count:networkEvents.length+(rendered?.requests||0),js_dependent:jsDependent,checks,...score,
-  rendering:{status:rendering,elapsed_ms:rendered?.duration_ms||0,requests:rendered?.requests||0,bytes:rendered?.bytes||0},
+  request_count:networkEvents.length+(rendered?.requests||0)+(renderedAbout?.requests||0),js_dependent:jsDependent,checks,...score,
+  rendering:{status:rendering,pages:(rendered?.complete?1:0)+(renderedAbout?.complete?1:0),elapsed_ms:(rendered?.duration_ms||0)+(renderedAbout?.duration_ms||0),requests:(rendered?.requests||0)+(renderedAbout?.requests||0),bytes:(rendered?.bytes||0)+(renderedAbout?.bytes||0)},
   robots_rules:robotsRules,probes,network_errors:errors,network_events:networkEvents,
   summary:{strengths,weaknesses,uncertain,unverified_count:checks.length-verified.length},
   provisional,version:'instant-v1.0',
