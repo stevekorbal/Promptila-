@@ -1,0 +1,32 @@
+name: Instant checker private QA
+on:
+  push:
+    branches:
+      - feature/instant-checker-phase1-private
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Reproducible clean install (committed lockfile)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify resolved Babel dependencies
+        run: npm ls @babel/parser @babel/traverse @babel/core @vitejs/plugin-react
+      - run: npx tsx --test tests/instant-checker.test.ts tests/instant-checker-concurrency.test.ts
+      - run: npm run lint
+      - run: npm run build
+      - run: npx tsx tests/instant-checker-live.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: instant-checker-private-results
+          path: instant-checker-private-results.json
+          if-no-files-found: warn

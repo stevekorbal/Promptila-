@@ -11,6 +11,7 @@ const Header: React.FC = () => {
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'How It Works', path: '/how-it-works' },
+    { name: 'Free AI Checker', path: '/ai-visibility-checker' },
     { name: 'Services', path: '/services' },
     { name: 'Pricing', path: '/pricing' },
     { name: 'Industries', path: '/industries' },
