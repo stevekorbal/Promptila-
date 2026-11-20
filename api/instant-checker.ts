@@ -45,7 +45,7 @@ type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAft
 async function safeFetch(url:URL,start:number,redirects=0,options:FetchOptions={}):Promise<PageResponse>{
  if(redirects>3)throw Error('redirect_limit');
  if(options.allowedHost){
-  const normalize=(name:string)=>name.toLowerCase().replace(/^www\\./,'');
+  const normalize=(name:string)=>name.toLowerCase().replace(/^www\./,'');
   if(normalize(url.hostname)!==normalize(options.allowedHost))throw Error('unsafe_cross_site_redirect');
  }
  if(performance.now()-start>(options.deadline??TOTAL_BUDGET))throw Error('scan_deadline');
