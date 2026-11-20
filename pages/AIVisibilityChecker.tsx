@@ -4,6 +4,17 @@ import {Globe,ShieldCheck,Search,Copy,CheckCircle2,AlertTriangle,Clock,ChevronDo
 type Check={id:string;category:string;label:string;points:number;status:'pass'|'fail'|'unverified';evidence:string};
 type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];uncertain?:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean}};
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
+async function readApiResponse(response:Response):Promise<any>{
+ const contentType=response.headers.get('content-type')||'';
+ if(!contentType.toLowerCase().includes('application/json')){
+  if(response.status>=500)throw Error('The website checker server could not complete this request. Please try again shortly. If it continues, contact Promptila support.');
+  throw Error('The website checker returned an unexpected response. Please try again.');
+ }
+ let result:any;
+ try{result=await response.json();}catch{throw Error('The website checker returned an incomplete response. Please try again.');}
+ if(!response.ok)throw Error(typeof result?.error==='string'?result.error:'The website checker is unavailable. Please try again.');
+ return result;
+}
 const labels:{[key:string]:string}={pass:'Found',fail:'Needs attention',unverified:'Not verified'};
 const cats=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
 const badgeStyles=['dark','light','shield','seal'] as const;
@@ -42,7 +53,7 @@ export default function AIVisibilityChecker(){
   if(!reportDomain)return;
   let live=true;setLoading(true);setError('');setReport(null);
   fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain))
-   .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Report unavailable');return d;})
+   .then(readApiResponse)
    .then(d=>{if(live){setReport(d.report);setStale(Boolean(d.stale));}})
    .catch(e=>{if(live)setError(e.message);})
    .finally(()=>{if(live)setLoading(false);});
@@ -52,9 +63,8 @@ export default function AIVisibilityChecker(){
   e.preventDefault();setLoading(true);setError('');setReport(null);setCached(false);setLeadStatus('');
   try{
    const r=await fetch('/api/instant-checker',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({website})});
-   const d=await r.json();
    if(r.status===202)throw Error('A scan is already running for this website. Open its report shortly.');
-   if(!r.ok)throw Error(d.error||'Unable to scan website');
+   const d=await readApiResponse(r);
    setReport(d.report);setCached(Boolean(d.cached));setStale(false);
   }catch(e:any){setError(e.message||'Unable to scan website');}finally{setLoading(false);}
  }
@@ -63,8 +73,7 @@ export default function AIVisibilityChecker(){
   setLeadLoading(true);setLeadStatus('');
   try{
    const r=await fetch('/api/instant-checker-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...lead,domain:report.domain})});
-   const d=await r.json();
-   if(!r.ok)throw Error(d.error||'Unable to submit');
+   const d=await readApiResponse(r);
    setLeadStatus(d.message||'Request received.');
   }catch(e:any){setLeadStatus(e.message||'Unable to submit.');}finally{setLeadLoading(false);}
  }
