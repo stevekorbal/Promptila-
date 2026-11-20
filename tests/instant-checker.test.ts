@@ -205,3 +205,13 @@ test('public checker and lead endpoints do not depend on private launch flags',(
   assert.doesNotMatch(content,/INSTANT_CHECKER_ENABLED|INSTANT_CHECKER_PUBLIC_ENABLED|INSTANT_CHECKER_TEST_TOKEN|VITE_INSTANT_CHECKER_PUBLIC|x-instant-test-token|Private tester access key/);
  }
 });
+
+test('Vercel function health check responds before loading scanner or Supabase',async()=>{
+ const res:any={statusCode:200,body:null,headers:{}};
+ res.setHeader=(key:string,value:string)=>{res.headers[key]=value;return res;};
+ res.status=(code:number)=>{res.statusCode=code;return res;};
+ res.json=(value:any)=>{res.body=value;return res;};
+ await instantHandler({method:'GET',query:{health:'1'},headers:{}} as any,res);
+ assert.equal(res.statusCode,200);
+ assert.deepEqual(res.body,{status:'ok'});
+});
