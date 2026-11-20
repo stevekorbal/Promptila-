@@ -3,6 +3,7 @@ import {safeFetch,validateWebsite,publicIPv4,type PageResponse,type FetchOptions
 import {parseHtml,schemaNodes,schemaHasType,type Evidence} from './instant-evidence.ts';
 import {robotsPermission,ROBOTS_AGENTS,PROBE_AGENTS,classifyProbe} from './instant-crawlers.ts';
 import {validateStructuredData,validateCanonical} from './instant-validation.ts';
+import type {RenderedPage,SafeRendererFetcher} from './instant-render.ts';
 
 export {safeFetch,validateWebsite,publicIPv4};
 export type {PageResponse};
@@ -70,7 +71,8 @@ function evidenceReason(page:PageResponse|null,error:string|undefined,subject:st
  return subject+': HTTP '+page.status+(page.truncated?' (bounded partial content)':'');
 }
 
-export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
+export type RenderCallback=(url:URL,fetcher:SafeRendererFetcher,start:number)=>Promise<RenderedPage|null>;
+export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer?:RenderCallback){
  const url=validateWebsite(raw),started=performance.now();
  const checks:Check[]=[];
  const errors:Record<string,string>={};
@@ -98,15 +100,47 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  const jobs=[fetchOne('/'),fetchOne('/robots.txt'),fetchOne('/llms.txt'),
   ...PROBE_AGENTS.map(probe=>fetchOne('/',probe.value))];
  const [home,robots,llms,...probePages]=await Promise.all(jobs);
- const htmlAvailable=usableHtml(home),evidence:Evidence=htmlAvailable?
+ const htmlAvailable=usableHtml(home),rawEvidence:Evidence=htmlAvailable?
   parseHtml(home.body,!!home.truncated):parseHtml('',true);
- const nodes=schemaNodes(evidence.schema);
  const htmlFinal=htmlAvailable&&!home.truncated;
+ const bodyReadable=rawEvidence.text.length>=300||rawEvidence.appData.join(' ').length>=300;
+ const jsDependent=rawEvidence.jsShell||(htmlAvailable&&!bodyReadable&&(home?.body.match(/<script\b/gi)||[]).length>=2);
+ let rendered:RenderedPage|null=null;
+ let rendering:'not_needed'|'disabled'|'complete'|'failed'=jsDependent?'disabled':'not_needed';
+ if(jsDependent&&htmlAvailable){
+  let activeRenderer=renderer;
+  if(!activeRenderer&&process.env.INSTANT_RENDER_FALLBACK==='true'){
+   try{activeRenderer=(await import('./instant-render.ts')).renderJavaScriptPage;}catch{activeRenderer=undefined;}
+  }
+  if(activeRenderer){
+   try{rendered=await activeRenderer(url,fetcher,started);}catch{rendered=null;}
+   rendering=rendered?.complete?'complete':'failed';
+  }
+ }
+ const renderedEvidence=rendered?.complete?parseHtml(rendered.html,false):null;
+ // Raw crawler permissions/probes are never replaced with browser DOM evidence.
+ const evidence:Evidence=renderedEvidence?{
+  ...rawEvidence,
+  title:rawEvidence.title||renderedEvidence.title,
+  description:rawEvidence.description||renderedEvidence.description,
+  canonical:rawEvidence.canonical||renderedEvidence.canonical,
+  schema:[...rawEvidence.schema,...renderedEvidence.schema.filter(x=>
+   !rawEvidence.schema.some(y=>JSON.stringify(y)===JSON.stringify(x)))],
+  h1:renderedEvidence.h1.length?renderedEvidence.h1:rawEvidence.h1,
+  headings:renderedEvidence.headings.length?renderedEvidence.headings:rawEvidence.headings,
+  text:renderedEvidence.text.length>rawEvidence.text.length?renderedEvidence.text:rawEvidence.text,
+  aboutLinks:[...new Set([...rawEvidence.aboutLinks,...renderedEvidence.aboutLinks])],
+  services:[...new Set([...rawEvidence.services,...renderedEvidence.services])],
+  appData:[...new Set([...rawEvidence.appData,...renderedEvidence.appData])],
+  noindex:rawEvidence.noindex||renderedEvidence.noindex,
+  jsShell:false,
+  truncated:false
+ }:rawEvidence;
+ const nodes=schemaNodes(evidence.schema);
  const title=evidence.title,description=evidence.description;
- const bodyReadable=evidence.text.length>=300||evidence.appData.join(' ').length>=300;
- const jsDependent=evidence.jsShell||(htmlAvailable&&!bodyReadable&&(home?.body.match(/<script\b/gi)||[]).length>=2);
+ const contentVerified=(htmlFinal&&!jsDependent)||!!renderedEvidence;
  const absent=(confirmed:boolean):Verdict=>confirmed?'fail':'unverified';
- const contentMissing=(found:boolean):Verdict=>found?'pass':absent(htmlFinal&&!jsDependent);
+ const contentMissing=(found:boolean):Verdict=>found?'pass':absent(contentVerified);
  const effectiveRobots=robots?.status===200&&!robots.type.includes('html')&&!/^\s*</.test(robots.body)&&!robots.truncated;
  const robotsAbsent=robots&&[404,410].includes(robots.status);
  const robotsRules:Record<string,string>={};
@@ -149,7 +183,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  add('C2','Semantic structure','Meta description',4,description.length>=40?'pass':contentMissing(false),
   description.slice(0,150)||'Description not found in response');
  add('C3','Semantic structure','Primary H1 heading',5,evidence.h1.length===1?'pass':
-  evidence.h1.length>1&&htmlFinal?'fail':contentMissing(false),
+  evidence.h1.length>1&&contentVerified?'fail':contentMissing(false),
   evidence.h1.length?evidence.h1.length+' H1 heading(s)':'No confirmed H1 in collected HTML');
  add('C4','Semantic structure','Heading hierarchy',3,
   evidence.headings.length>0&&evidence.headings.every((h,i)=>i===0||h<=evidence.headings[i-1]+1)?'pass':
@@ -217,7 +251,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   evidence.canonical?evidence.canonical.slice(0,150)+' ('+canonicalCheck.reason+')':'No canonical verified');
  const headerNoindex=/\bnoindex\b/i.test(home?.headers['x-robots-tag']||'');
  add('F4','Technical health','Homepage indexability signals',2,
-  headerNoindex||evidence.noindex?'fail':htmlFinal?'pass':'unverified',
+  headerNoindex||evidence.noindex?'fail':contentVerified?'pass':'unverified',
   headerNoindex||evidence.noindex?'Explicit noindex directive':'Noindex not found in complete HTML');
 
  const probes:Record<string,any>={};
@@ -241,9 +275,10 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  return {
   domain:url.hostname,url:url.href,scanned_at:new Date().toISOString(),
   elapsed_ms:Math.round(performance.now()-started),
-  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0),
+  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0)+(rendered?.bytes||0),
   wire_bytes:networkEvents.reduce((n,x)=>n+(x.wire_bytes||0),0),
-  request_count:networkEvents.length,js_dependent:jsDependent,checks,...score,
+  request_count:networkEvents.length+(rendered?.requests||0),js_dependent:jsDependent,checks,...score,
+  rendering:{status:rendering,elapsed_ms:rendered?.duration_ms||0,requests:rendered?.requests||0,bytes:rendered?.bytes||0},
   robots_rules:robotsRules,probes,network_errors:errors,network_events:networkEvents,
   summary:{strengths,weaknesses,uncertain,unverified_count:checks.length-verified.length},
   provisional,version:'instant-v1.0',
