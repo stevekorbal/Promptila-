@@ -1,7 +1,8 @@
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
 import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
-import { parseHtml } from '../api/_lib/instant-evidence.ts';
+import { parseHtml,schemaNodes } from '../api/_lib/instant-evidence.ts';
+import {validateStructuredData,validateCanonical} from '../api/_lib/instant-validation.ts';
 import assert from 'node:assert/strict';
 import {validateWebsite,publicIPv4,calculate,scanWebsite,type Check} from '../api/_lib/instant-checker.ts';
 const allocations:Record<string,[string,number][]>={
@@ -104,4 +105,38 @@ test('HTML parser reads meaningful metadata, JSON-LD and headings without runnin
 test('bot challenge is not a successful usable website response',()=>{
  assert.equal(classifyProbe(200,'text/html','<html><h1>Just a moment</h1><p>Checking your browser</p></html>',false).status,'challenge');
  assert.equal(classifyProbe(403,'text/html','Access denied',false).status,'blocked');
+});
+
+test('unrelated schema entities do not earn business name and URL points',()=>{
+ const site=new URL('https://shop.example.com/');
+ const unrelated=[{'@context':'https://schema.org','@type':'Organization',name:'Other Company',url:'https://unrelated.test/'},
+ {'@context':'https://schema.org','@type':'WebSite',name:'Shop',url:'https://shop.example.com/'}];
+ const v=validateStructuredData(unrelated,site);
+ assert.equal(v.valid,true);
+ assert.equal(v.business,false);
+ assert.equal(v.identity,false);
+ assert.equal(v.page,true);
+});
+test('split name and URL across separate JSON-LD entities cannot earn identity points',()=>{
+ const site=new URL('https://example.com/');
+ const split=[{'@context':'https://schema.org','@type':'Organization',name:'Example Company'},
+ {'@context':'https://schema.org','@type':'Organization',url:'https://example.com/'}];
+ assert.equal(validateStructuredData(split,site).identity,false);
+});
+test('valid related business JSON-LD earns identity points with inherited @graph context',()=>{
+ const raw=[{'@context':'https://schema.org','@graph':[{'@type':'LocalBusiness',name:'Harris HVAC',url:'https://www.harrishvac.net/'},{'@type':'WebSite',url:'https://www.harrishvac.net/'}]}];
+ const v=validateStructuredData(schemaNodes(raw),new URL('https://harrishvac.net/'));
+ assert.equal(v.identity,true);
+ assert.equal(v.page,true);
+});
+test('canonical accepts www equivalent homepage only, rejects other origins or downgrade',()=>{
+ const site=new URL('https://harrishvac.net/');
+ assert.equal(validateCanonical('https://www.harrishvac.net/',site).valid,true);
+ assert.equal(validateCanonical('https://unrelated.example/',site).valid,false);
+ assert.equal(validateCanonical('https://www.harrishvac.net/other',site).valid,false);
+ assert.equal(validateCanonical('http://www.harrishvac.net/',site).valid,false);
+});
+test('ordinary pages mentioning bot protection in script are not classified as challenges',()=>{
+ const body='<html><head><title>Harris HVAC Services</title><meta name="description" content="Professional heating and cooling services for homes"/></head><body><main><h1>Heating and Cooling Services</h1><p>'+('We provide reliable HVAC repair and installation for residential customers. ').repeat(6)+'</p></main><script>const test = "verify you are human";</script></body></html>';
+ assert.equal(classifyProbe(200,'text/html',body,false).status,'accessible');
 });
