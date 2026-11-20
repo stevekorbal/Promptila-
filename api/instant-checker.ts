@@ -777,6 +777,22 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer?:Rende
   headerNoindex||evidence.noindex?'fail':contentVerified?'pass':'unverified',
   headerNoindex||evidence.noindex?'Explicit noindex directive':'Noindex not found in complete HTML');
 
+ // Attribute findings to rendered DOM, not to raw crawler responses.
+ if(renderedEvidence){
+  for(const check of checks){
+   const browserDerived=
+    (/^B[1-4]$/.test(check.id)&&rawEvidence.schema.length===0)||
+    (check.id==='C3'&&rawEvidence.h1.length===0)||
+    (check.id==='C4'&&rawEvidence.headings.length===0)||
+    (check.id==='C5'&&rawEvidence.text.length<300)||
+    (check.id==='D3'&&!!renderedAbout?.complete&&aboutConfirmed)||
+    (check.id==='D4'&&rawEvidence.text.length<300)||
+    (check.id==='F3'&&!rawEvidence.canonical)||
+    (check.id==='F4'&&!htmlFinal);
+   if(browserDerived&&check.status!=='unverified')
+    check.evidence=(check.evidence+' [rendered DOM]').slice(0,240);
+  }
+ }
  const probes:Record<string,any>={};
  for(let i=0;i<PROBE_AGENTS.length;i++){
   const agent=PROBE_AGENTS[i],p=probePages[i];
