@@ -40,7 +40,7 @@ test('verified rendered DOM produces defensible score without altering weights o
  assert.equal(scan.checks.find(c=>c.id==='B2')?.status,'pass');
  assert.equal(scan.checks.find(c=>c.id==='C3')?.status,'pass');
  assert.equal(scan.checks.find(c=>c.id==='F3')?.status,'pass');
- assert.equal(scan.request_count,rawScan.request_count+4);
+ assert.equal(scan.request_count,rawScan.request_count+5); // Additional same-site About page verification after rendering
 });
 
 test('browser fallback remains provisional when rendering fails',async()=>{
