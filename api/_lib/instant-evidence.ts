@@ -122,12 +122,13 @@ export function parseHtml(html:string,truncated=false):Evidence{
 }
 export function schemaNodes(raw:any[]):any[]{
  const out:any[]=[];
- const visit=(x:any,depth=0)=>{
-  if(depth>8||out.length>100||!x)return;
-  if(Array.isArray(x))return x.slice(0,100).forEach(y=>visit(y,depth+1));
+ const visit=(x:any,depth=0,inheritedContext:any=null)=>{
+  if(depth>8||out.length>=100||!x)return;
+  if(Array.isArray(x))return x.slice(0,100).forEach(y=>visit(y,depth+1,inheritedContext));
   if(typeof x!=='object')return;
-  if(x['@type'])out.push(x);
-  if(x['@graph'])visit(x['@graph'],depth+1);
+  const context=x['@context']||inheritedContext;
+  if(x['@type'])out.push(context&&!x['@context']?{...x,'@context':context}:x);
+  if(x['@graph'])visit(x['@graph'],depth+1,context);
  };
  raw.forEach(x=>visit(x));return out;
 }
