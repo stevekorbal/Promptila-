@@ -1,7 +1,7 @@
 import {instantAccessAllowed} from '../api/_lib/instant-access.ts';
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
-import { badgeSvg,BADGE_STYLES } from '../api/instant-checker-badge.ts';
+import { badgeSvg,BADGE_STYLES } from '../api/_lib/instant-badge.ts';
 import submitLead from '../api/instant-checker-lead.ts';
 import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
 import { parseHtml,schemaNodes } from '../api/_lib/instant-evidence.ts';
