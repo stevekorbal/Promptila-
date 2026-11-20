@@ -46,7 +46,9 @@ function identifiableBrand(value:string):boolean{
  const v=value.trim();return v.length>=3&&v.length<160&&!/^(home|welcome|untitled|website|index|just a moment|attention required)$/i.test(v);
 }
 function usableHtml(page:PageResponse|null):page is PageResponse{
- return !!page&&page.status>=200&&page.status<300&&page.type.includes('html')&&!/just a moment|checking your browser|verify you are human|access denied/i.test(page.body.slice(0,5000));
+ if(!page||page.status<200||page.status>=300||!page.type.includes('html'))return false;
+ const title=(page.body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]||'').trim();
+ return !/^(just a moment|checking your browser|verify you are human|access denied|attention required)/i.test(title);
 }
 function safeSameSite(candidate:string,base:URL):URL|null{
  try{
@@ -156,8 +158,9 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   evidence.text.length>=300?'pass':contentMissing(false),
   evidence.text.length+' visible-text characters; '+(evidence.truncated?'partial fetch':'bounded HTML'));
 
+ const headlineBrand=evidence.title.split(/[|–—]/)[0]?.trim()||'';
  const strongBrand=structured.businessName||evidence.ogName||
-  (identifiableBrand(evidence.siteName)?evidence.siteName:'');
+  (identifiableBrand(headlineBrand)?headlineBrand:'');
  const serviceText=structured.businessDescription||evidence.services.find(x=>x.length>=40)||'';
  const brandInText=strongBrand&&(
   (description+' '+evidence.text+' '+evidence.appData.join(' ')).toLowerCase().includes(strongBrand.toLowerCase())
