@@ -34,7 +34,7 @@ export async function renderJavaScriptPage(
  let requests=0,bytes=0;let overBudget=false;
  // Avoid downloading browsers at runtime. Chromium ships with the function.
  try{
-  const launchBrowser=launch||async()=>{
+  const launchBrowser=launch||(async()=>{
    const [{default:puppeteer},{default:chromium}]=await Promise.all([
     import('puppeteer-core'),import('@sparticuz/chromium')
    ]);
@@ -43,7 +43,7 @@ export async function renderJavaScriptPage(
     args:[...chromium.args,'--disable-background-networking','--disable-extensions','--disable-sync','--no-first-run'],
     headless:true,timeout:3500,protocolTimeout:5500
    });
-  };
+  });
   browser=await Promise.race([
    launchBrowser(),
    new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('browser_launch_deadline')),4000))
