@@ -100,7 +100,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   }
  }catch(error:any){
   const message=String(error?.message||'');
-  if(/valid website|public DNS|Unsafe|Invalid hostname|Only public|URL too long/.test(message))return res.status(400).json({error:'Enter a valid public website URL.'});
+  if(/valid website|public DNS|Unsafe|Invalid hostname|Only public|Only a public|URL too long/.test(message))return res.status(400).json({error:'Enter a valid public website URL.'});
   console.error('Instant checker unavailable',message.slice(0,100));
   return res.status(503).json({error:'Checker temporarily unavailable.'});
  }
