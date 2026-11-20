@@ -203,7 +203,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  add('F2','Technical health','Successful homepage response',3,
   home?.status===200?'pass':home&&[404,410].includes(home.status)?'fail':'unverified',
   evidenceReason(home,errors['/'],'Homepage'));
- const canonicalCheck=validateCanonical(evidence.canonical,url);
+ const canonicalCheck=validateCanonical(evidence.canonical,url,home?.url);
  add('F3','Technical health','Valid canonical URL',2,
   canonicalCheck.valid?'pass':contentMissing(false),
   evidence.canonical?evidence.canonical.slice(0,150)+' ('+canonicalCheck.reason+')':'No canonical verified');
