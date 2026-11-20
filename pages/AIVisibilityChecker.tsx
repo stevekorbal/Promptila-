@@ -19,9 +19,6 @@ const whyMatters:Record<string,string>={
 export default function AIVisibilityChecker(){
  const {domain:reportDomain}=useParams<{domain?:string}>();
  const [website,setWebsite]=useState('');
- const [testerToken,setTesterToken]=useState('');
- const publicMode=(import.meta as ImportMeta & {env?:Record<string,string>}).env?.VITE_INSTANT_CHECKER_PUBLIC==='true';
- const authHeaders=publicMode?{}:{'x-instant-test-token':testerToken};
  const [badgePreview,setBadgePreview]=useState('');
  const [report,setReport]=useState<Report|null>(null);
  const [loading,setLoading]=useState(false);
@@ -42,19 +39,19 @@ export default function AIVisibilityChecker(){
   return()=>clearInterval(handle);
  },[loading]);
  useEffect(()=>{
-  if(!reportDomain||(!publicMode&&testerToken.length<32))return;
+  if(!reportDomain)return;
   let live=true;setLoading(true);setError('');setReport(null);
-  fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain),{headers:authHeaders})
+  fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain))
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Report unavailable');return d;})
    .then(d=>{if(live){setReport(d.report);setStale(Boolean(d.stale));}})
    .catch(e=>{if(live)setError(e.message);})
    .finally(()=>{if(live)setLoading(false);});
   return()=>{live=false;};
- },[reportDomain,testerToken,publicMode]);
+ },[reportDomain]);
  async function submit(e:React.FormEvent){
   e.preventDefault();setLoading(true);setError('');setReport(null);setCached(false);setLeadStatus('');
   try{
-   const r=await fetch('/api/instant-checker',{method:'POST',headers:{'content-type':'application/json',...authHeaders},body:JSON.stringify({website})});
+   const r=await fetch('/api/instant-checker',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({website})});
    const d=await r.json();
    if(r.status===202)throw Error('A scan is already running for this website. Open its report shortly.');
    if(!r.ok)throw Error(d.error||'Unable to scan website');
@@ -65,7 +62,7 @@ export default function AIVisibilityChecker(){
   e.preventDefault();if(!report)return;
   setLeadLoading(true);setLeadStatus('');
   try{
-   const r=await fetch('/api/instant-checker-lead',{method:'POST',headers:{'content-type':'application/json','x-instant-test-token':testerToken},body:JSON.stringify({...lead,domain:report.domain})});
+   const r=await fetch('/api/instant-checker-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...lead,domain:report.domain})});
    const d=await r.json();
    if(!r.ok)throw Error(d.error||'Unable to submit');
    setLeadStatus(d.message||'Request received.');
@@ -76,15 +73,14 @@ export default function AIVisibilityChecker(){
  const badgeSrc=report?window.location.origin+'/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
  const badge=report&&report.status==='complete'&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
  useEffect(()=>{
-  if(!report||report.status!=='complete'||stale||(!publicMode&&testerToken.length<32)){setBadgePreview('');return;}
+  if(!report||report.status!=='complete'||stale){setBadgePreview('');return;}
   let live=true;let objectUrl='';
-  fetch('/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle,
-    {headers:{'x-instant-test-token':testerToken}})
+  fetch('/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle)
    .then(async response=>{if(!response.ok)throw Error('Unavailable badge');return response.blob();})
    .then(blob=>{if(!live)return;objectUrl=URL.createObjectURL(blob);setBadgePreview(objectUrl);})
    .catch(()=>{if(live)setBadgePreview('');});
   return()=>{live=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
- },[report?.domain,report?.status,badgeStyle,stale,testerToken,publicMode]);
+ },[report?.domain,report?.status,badgeStyle,stale]);
  return <div className="bg-slate-50 min-h-screen pt-32 pb-20">
   <div className="max-w-5xl mx-auto px-4 sm:px-6">
    <div className="text-center mb-10">
@@ -92,12 +88,9 @@ export default function AIVisibilityChecker(){
     <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 mt-5">How ready is your website for AI search?</h1>
     <p className="text-slate-600 max-w-2xl mx-auto mt-4">Get a free technical website-readiness check. No account or paid AI model requests.</p>
    </div>
-   {!publicMode&&<label className="block max-w-xl mx-auto mb-5 text-sm font-semibold text-slate-700">Private tester access key
-     <input type="password" autoComplete="off" value={testerToken} onChange={e=>setTesterToken(e.target.value)} placeholder="Access key supplied by Promptila" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 bg-white" />
-    </label>}
    {!reportDomain&&<form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 sm:p-8 flex flex-col sm:flex-row gap-3 mb-8">
     <input className={input} type="text" required maxLength={2048} value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://yourbusiness.com" aria-label="Website URL"/>
-    <button disabled={loading||(!publicMode&&testerToken.length<32)} className="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">{loading?'Checking website…':'Check my website'}</button>
+    <button disabled={loading} className="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">{loading?'Checking website…':'Check my website'}</button>
    </form>}
    {loading&&<div role="status" className="bg-white rounded-xl border p-6 mb-6 text-indigo-700 flex items-center gap-3"><Search className="animate-pulse"/>Inspecting website HTML, crawler permissions and technical signals. {elapsed} seconds elapsed; no simulated progress percentage.</div>}
    {error&&<div role="alert" className="rounded-xl p-4 bg-amber-50 text-amber-900 border border-amber-200 mb-7">{error}</div>}
