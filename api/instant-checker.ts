@@ -1,4 +1,3 @@
-import {instantAccessAllowed} from './_lib/instant-access.ts';
 import {badgeSvg,BADGE_STYLES,type BadgeStyle} from './_lib/instant-badge.ts';
 import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
@@ -36,7 +35,6 @@ export async function guardedScanUpdate(db:any,domain:string,token:string,patch:
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('X-Content-Type-Options','nosniff');
- if(!instantAccessAllowed(req.headers))return res.status(404).json({error:'Checker is not available.'});
  if(!['POST','GET'].includes(req.method||''))return res.status(405).json({error:'Method not allowed'});
  try{
   const url=validateWebsite(req.method==='GET'?req.query.domain:req.body?.website);
