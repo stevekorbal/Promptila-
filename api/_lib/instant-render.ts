@@ -69,10 +69,13 @@ export async function renderJavaScriptPage(
    const abort=async()=>{try{await request.abort('blockedbyclient')}catch{}};
    try{
     if(overBudget||performance.now()-begin>RENDER_MAX_MS)return await abort();
-    if(!['GET','HEAD'].includes(request.method()))return await abort();
+    if(!['GET','HEAD'].includes(request.method())){if(process.env.INSTANT_RENDER_DIAGNOSTICS==='true')console.warn('Browser request method blocked',request.method());return await abort();}
     if(['image','media','font','stylesheet'].includes(request.resourceType()))return await abort();
     const target=new URL(request.url());
-    if(!await publicRenderDestination(target,website))return await abort();
+    if(!await publicRenderDestination(target,website)){
+     if(process.env.INSTANT_RENDER_DIAGNOSTICS==='true')console.warn('Browser request destination blocked',request.resourceType(),target.hostname,target.pathname);
+     return await abort();
+    }
     if(++requests>RENDER_MAX_REQUESTS){overBudget=true;return await abort();}
     // The original scanner performs pinned DNS lookup, rejects non-public addresses
     // and validates every redirect. allowedHost closes cross-site redirect escape.
@@ -89,7 +92,10 @@ export async function renderJavaScriptPage(
      body:result.body,
      headers:{'access-control-allow-origin':'*','cache-control':'no-store'}
     });
-   }catch{await abort();}
+   }catch(error){
+    if(process.env.INSTANT_RENDER_DIAGNOSTICS==='true')console.warn('Browser intercepted fetch blocked',request.resourceType(),String((error as Error)?.message||error).slice(0,120));
+    await abort();
+   }
   });
   page.on('popup',async (popup:any)=>{try{await popup.close()}catch{}});
   await page.setDefaultNavigationTimeout(6500);
