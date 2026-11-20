@@ -1,3 +1,4 @@
+import {instantAccessAllowed} from './_lib/instant-access.ts';
 import type {VercelRequest,VercelResponse} from '@vercel/node';
 import {createClient} from '@supabase/supabase-js';
 import {validateWebsite} from './_lib/instant-checker.ts';
@@ -31,7 +32,7 @@ export function badgeSvg(domain:string,score:number,scannedAt:string,style:Badge
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('X-Content-Type-Options','nosniff');
- if(process.env.INSTANT_CHECKER_ENABLED!=='true')return res.status(404).end();
+ if(!instantAccessAllowed(req.headers))return res.status(404).end();
  if(req.method!=='GET')return res.status(405).end();
  try{
   const domain=validateWebsite(req.query.domain).hostname;
