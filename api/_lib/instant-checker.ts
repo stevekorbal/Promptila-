@@ -230,8 +230,9 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  }
  const score=calculate(checks);
  const verified=checks.filter(x=>x.status!=='unverified');
- const strengths=verified.filter(x=>x.status==='pass').slice(0,4).map(x=>x.label);
- const weaknesses=verified.filter(x=>x.status==='fail').slice(0,4).map(x=>x.label);
+ const strengths=verified.filter(x=>x.status==='pass').sort((a,b)=>b.points-a.points).slice(0,4).map(x=>x.label);
+ const weaknesses=verified.filter(x=>x.status==='fail').sort((a,b)=>b.points-a.points).slice(0,4).map(x=>x.label);
+ const uncertain=checks.filter(x=>x.status==='unverified').sort((a,b)=>b.points-a.points).slice(0,4).map(x=>x.label);
  const earnedPoints=verified.filter(x=>x.status==='pass').reduce((n,c)=>n+c.points,0);
  const unknownPoints=checks.filter(x=>x.status==='unverified').reduce((n,c)=>n+c.points,0);
  // This is an evidence bound, not an estimated final score; zero is never assigned to an unverified check.
@@ -244,7 +245,7 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   wire_bytes:networkEvents.reduce((n,x)=>n+(x.wire_bytes||0),0),
   request_count:networkEvents.length,js_dependent:jsDependent,checks,...score,
   robots_rules:robotsRules,probes,network_errors:errors,network_events:networkEvents,
-  summary:{strengths,weaknesses,unverified_count:checks.length-verified.length},
+  summary:{strengths,weaknesses,uncertain,unverified_count:checks.length-verified.length},
   provisional,version:'instant-v1.0',
   disclaimer:'Website-signal readiness estimates only. No AI models were queried. These do not measure actual AI recommendations or rankings.',
   llms_note:'llms.txt is voluntary and is not a requirement or guarantee for AI recommendations.'
