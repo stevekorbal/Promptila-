@@ -20,6 +20,17 @@ export function publicResult(row:any){
   disclaimer:r.disclaimer,llms_note:r.llms_note,
   robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional};
 }
+export function parseClaimToken(value:unknown):string|null{
+ const m=typeof value==='string'?/^claimed:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(value):null;
+ return m?.[1]||null;
+}
+export async function guardedScanUpdate(db:any,domain:string,token:string,patch:Record<string,unknown>,now=new Date().toISOString()):Promise<boolean>{
+ const {data,error}=await db.from('instant_scans').update(patch)
+  .eq('domain',domain).eq('claim_token',token).eq('status','running')
+  .gt('lease_expires_at',now).select('domain').maybeSingle();
+ if(error)throw error;
+ return data?.domain===domain;
+}
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('X-Content-Type-Options','nosniff');
@@ -49,24 +60,28 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
    if(data?.result)return res.status(200).json({report:publicResult(data),cached:true});
    return res.status(202).json({status:'processing',domain});
   }
-  if(claim!=='claimed')return res.status(503).json({error:'Unable to reserve scan.'});
+  const claimToken=parseClaimToken(claim);
+  if(!claimToken)return res.status(503).json({error:'Unable to reserve scan.'});
   try{
    const output=await scanWebsite(url.href);
    const cpuRate=Number(process.env.INSTANT_COMPUTE_USD_PER_MS);
    const transferRate=Number(process.env.INSTANT_TRANSFER_USD_PER_BYTE);
    const calibrated=process.env.INSTANT_COMPUTE_USD_PER_MS!==undefined&&process.env.INSTANT_TRANSFER_USD_PER_BYTE!==undefined&&Number.isFinite(cpuRate)&&Number.isFinite(transferRate)&&cpuRate>=0&&transferRate>=0;
    const estimatedCost=calibrated?Number((output.elapsed_ms*cpuRate+output.bytes_fetched*transferRate).toFixed(6)):null;
-   const {error:updateError}=await db.from('instant_scans').update({
+   const committed=await guardedScanUpdate(db,domain,claimToken,{
     status:output.status,result:output,score_version:output.version,
     elapsed_ms:output.elapsed_ms,bytes_fetched:output.bytes_fetched,request_count:output.request_count,
     estimated_cost_usd:estimatedCost,
     scanned_at:output.scanned_at,
     expires_at:new Date(Date.now()+7*86400_000).toISOString()
-   }).eq('domain',domain).eq('status','running');
-   if(updateError)throw updateError;
+   });
+   if(!committed)return res.status(409).json({error:'Scan superseded or lease expired. Reload current report.'});
    return res.status(200).json({report:publicResult({result:output}),cached:false});
   }catch(error){
-   await db.from('instant_scans').update({status:'error',lease_expires_at:new Date().toISOString()}).eq('domain',domain).eq('status','running');
+   const failed=await guardedScanUpdate(db,domain,claimToken,{
+    status:'error',lease_expires_at:new Date().toISOString()
+   });
+   if(!failed)return res.status(409).json({error:'Scan superseded or lease expired. Reload current report.'});
    return res.status(502).json({error:'The website could not be checked safely. No score was assigned.'});
   }
  }catch(error:any){
