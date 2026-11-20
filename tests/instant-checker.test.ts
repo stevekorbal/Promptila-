@@ -135,6 +135,7 @@ test('canonical accepts www equivalent homepage only, rejects other origins or d
  assert.equal(validateCanonical('https://unrelated.example/',site).valid,false);
  assert.equal(validateCanonical('https://www.harrishvac.net/other',site).valid,false);
  assert.equal(validateCanonical('http://www.harrishvac.net/',site).valid,false);
+ assert.equal(validateCanonical('https://www.microsoft.com/en-us',new URL('https://www.microsoft.com/'),'https://www.microsoft.com/en-us').valid,true);
 });
 test('ordinary pages mentioning bot protection in script are not classified as challenges',()=>{
  const body='<html><head><title>Harris HVAC Services</title><meta name="description" content="Professional heating and cooling services for homes"/></head><body><main><h1>Heating and Cooling Services</h1><p>'+('We provide reliable HVAC repair and installation for residential customers. ').repeat(6)+'</p></main><script>const test = "verify you are human";</script></body></html>';
