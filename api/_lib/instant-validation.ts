@@ -49,7 +49,7 @@ export function validateStructuredData(nodes:any[],site:URL){
    matchedPage:pages.length}
  };
 }
-export function validateCanonical(canonical:string,site:URL){
+export function validateCanonical(canonical:string,site:URL,finalPageUrl?:string){
  if(!canonical.trim())return {valid:false,reason:'canonical_missing'};
  try{
   const u=new URL(canonical,site);
@@ -58,8 +58,9 @@ export function validateCanonical(canonical:string,site:URL){
   const requestedHost=site.hostname.toLowerCase().replace(/^www\./,'');
   const targetHost=u.hostname.toLowerCase().replace(/^www\./,'');
   if(targetHost!==requestedHost)return {valid:false,reason:'unrelated_canonical_host'};
-  if(u.pathname!=='/'&&u.pathname!=='')return {valid:false,reason:'canonical_not_homepage'};
+  const landingPath=finalPageUrl?new URL(finalPageUrl).pathname:site.pathname;
+  if(u.pathname!=='/'&&u.pathname!==landingPath)return {valid:false,reason:'canonical_not_homepage_or_final_landing_page'};
   if(site.protocol==='https:'&&u.protocol!=='https:')return {valid:false,reason:'downgraded_canonical'};
-  return {valid:true,reason:u.hostname===site.hostname?'matching_homepage':'equivalent_www_homepage'};
+  return {valid:true,reason:u.pathname===landingPath&&landingPath!=='/'?'matching_redirected_landing_page':u.hostname===site.hostname?'matching_homepage':'equivalent_www_homepage'};
  }catch{return {valid:false,reason:'invalid_canonical_url'};}
 }
