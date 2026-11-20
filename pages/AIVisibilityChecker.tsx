@@ -20,7 +20,7 @@ export default function AIVisibilityChecker(){
  const {domain:reportDomain}=useParams<{domain?:string}>();
  const [website,setWebsite]=useState('');
  const [testerToken,setTesterToken]=useState('');
- const publicMode=import.meta.env.VITE_INSTANT_CHECKER_PUBLIC==='true';
+ const publicMode=(import.meta as ImportMeta & {env?:Record<string,string>}).env?.VITE_INSTANT_CHECKER_PUBLIC==='true';
  const authHeaders=publicMode?{}:{'x-instant-test-token':testerToken};
  const [badgePreview,setBadgePreview]=useState('');
  const [report,setReport]=useState<Report|null>(null);
