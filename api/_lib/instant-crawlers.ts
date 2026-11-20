@@ -33,15 +33,28 @@ export function robotsPermission(body:string,agent:string,path='/'):RobotsVerdic
  return relevant[0].rule.allow?'allowed':'blocked';
 }
 export function classifyProbe(status:number,contentType:string,body:string,truncated:boolean){
- if([401,403,407,429,503].includes(status))return {status:'blocked',reason:'http_'+status};
- if(status!==200)return {status:'unverified',reason:'http_'+status};
- if(!contentType.includes('html'))return {status:'unverified',reason:'non_html_response'};
- const sample=body.toLowerCase();
- if(/(just a moment|checking your browser|enable javascript and cookies to continue|attention required|access denied|verify you are human|captcha|cf-challenge|cloudflare ray id|datadome|imperva|bot verification)/i.test(sample.slice(0,12000)))
-  return {status:'challenge',reason:'challenge_or_interstitial_detected'};
- const readable=body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
- if(body.length<500||readable.length<75)return {status:'unverified',reason:truncated?'truncated_short_body':'insufficient_html_content'};
- return {status:'accessible',reason:truncated?'meaningful_bounded_html':'meaningful_html'};
+ if([401,403,407,429].includes(status))return {status:'blocked',reason:'http_'+status,evidence:'HTTP status '+status};
+ if(status!==200)return {status:'unverified',reason:'http_'+status,evidence:'HTTP status '+status};
+ if(!contentType.includes('html'))return {status:'unverified',reason:'non_html_response',evidence:contentType.slice(0,90)};
+ // Ignore script and style contents so challenge libraries or marketing copy don't trigger false alarms.
+ const title=(body.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').replace(/<[^>]*>/g,' ').trim();
+ const visible=body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
+  .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<!--[\s\S]*?-->/g,' ')
+  .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+ const heading=(body.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||'').replace(/<[^>]*>/g,' ').trim();
+ const challengeTitle=/^(just a moment|attention required|access denied|verify you are human|security check|robot check|checking your browser)/i.test(title);
+ const challengeHeading=/^(verify you are human|checking your browser|access denied|security verification|complete the captcha)/i.test(heading);
+ const challengeDominates=/verify you are human|checking your browser before accessing|please complete the security check|your request has been blocked/i.test(visible.slice(0,700))&&visible.length<1800;
+ if(challengeTitle||challengeHeading||challengeDominates)
+  return {status:'challenge',reason:'verified_interstitial_markers',evidence:'Challenge title, primary heading or dominant interstitial text'};
+ // HTML byte size alone does not prove useful content: require readable content and site markup.
+ const substantive=(visible.length>=200&&
+  (/<(?:main|article|h1|h2|nav)\b/i.test(body)||/<meta\b[^>]*name=["']description["']/i.test(body)));
+ if(!substantive)return {status:'unverified',
+  reason:truncated?'truncated_unverified_content':'insufficient_semantic_content',
+  evidence:'No sufficiently readable HTML and semantic elements'};
+ return {status:'accessible',reason:truncated?'meaningful_bounded_html':'meaningful_html',
+  evidence:'HTTP 200, '+visible.length+' readable characters and semantic elements'};
 }
 export const PROBE_AGENTS=[
  {name:'GPTBot',value:'Mozilla/5.0 (compatible; GPTBot/1.3; +https://openai.com/gptbot)'},
