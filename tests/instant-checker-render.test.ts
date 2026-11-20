@@ -38,6 +38,7 @@ test('verified rendered DOM produces defensible score without altering weights o
  assert.deepEqual(scan.robots_rules,rawScan.robots_rules);
  assert.deepEqual(scan.probes,rawScan.probes);
  assert.equal(scan.checks.find(c=>c.id==='B2')?.status,'pass');
+ assert.match(scan.checks.find(c=>c.id==='B2')?.evidence||'',/rendered DOM/);
  assert.equal(scan.checks.find(c=>c.id==='C3')?.status,'pass');
  assert.equal(scan.checks.find(c=>c.id==='F3')?.status,'pass');
  assert.equal(scan.request_count,rawScan.request_count+5); // Additional same-site About page verification after rendering
