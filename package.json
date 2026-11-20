@@ -24,7 +24,9 @@
     "@stripe/stripe-js": "^7.0.0",
     "@stripe/react-stripe-js": "^3.0.0",
     "stripe": "^18.0.0",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "puppeteer-core": "25.11.0",
+    "@sparticuz/chromium": "153.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
