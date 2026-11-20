@@ -7,7 +7,7 @@ on:
       - .github/workflows/render-dependency-lock.yml
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   lockfile:
     runs-on: ubuntu-latest
@@ -23,3 +23,10 @@ jobs:
         with:
           name: instant-render-lock
           path: package-lock.json
+
+      - name: Commit reproducible lockfile to development branch only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git diff --cached --quiet || (git commit -m "Resolve browser render dependency lockfile" && git push origin HEAD:feature/instant-checker-render-fallback)
