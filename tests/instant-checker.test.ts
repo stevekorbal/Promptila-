@@ -1,5 +1,6 @@
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
+import { badgeSvg,BADGE_STYLES } from '../api/instant-checker-badge.ts';
 import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
 import { parseHtml,schemaNodes } from '../api/_lib/instant-evidence.ts';
 import {validateStructuredData,validateCanonical} from '../api/_lib/instant-validation.ts';
@@ -148,4 +149,26 @@ test('Mitch the Plumber: generic plumbing title does not prove a business brand'
  const scanned=await scanWebsite('https://www.mitchtheplumber-mi.com/',fetcher);
  assert.equal(scanned.checks.find(x=>x.id==='D1')?.status,'fail');
  assert.equal(scanned.checks.find(x=>x.id==='D4')?.status,'fail');
+});
+
+test('all four badge variants are distinct, current-date, public-only and linked to report',()=>{
+ const versions=BADGE_STYLES.map(style=>badgeSvg('example.com',84,'2026-11-20T12:00:00.000Z',style,'https://preview.example'));
+ assert.equal(versions.length,4);
+ assert.equal(new Set(versions).size,4);
+ for(const svg of versions){
+  assert.match(svg,/example.com/);
+  assert.match(svg,/2026-11-20/);
+  assert.match(svg,/preview.example\/ai-visibility-checker\/report\/example.com/);
+  assert.doesNotMatch(svg,/@example.com|customer_name|business_email|stripe|certified/i);
+ }
+ assert.throws(()=>badgeSvg('example.com',101,'2026-11-20','dark'));
+});
+test('private diagnostics never appear in public report projection',()=>{
+ const row={result:{domain:'example.com',status:'incomplete',score:null,scanned_at:'2026-11-20',
+  checks:[{id:'A1',category:'AI crawler access',label:'Crawler access',points:5,status:'unverified',evidence:'Connection ENOTFOUND'}],
+  network_errors:{secret:'private DNS error'},network_events:[{secret:'private'}],
+  internal_headers:{Authorization:'secret'},lead:{email:'private@example.com'},provisional:{minimum:0,maximum:100}}};
+ const text=JSON.stringify(publicResult(row));
+ assert.doesNotMatch(text,/network_errors|network_events|internal_headers|private@example.com|ENOTFOUND/);
+ assert.match(text,/provisional/);
 });
