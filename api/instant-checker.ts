@@ -1,5 +1,5 @@
 import type { VercelRequest,VercelResponse } from '@vercel/node';
-import { createHash } from 'node:crypto';
+import {createHash} from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import {lookup} from 'node:dns/promises';
@@ -8,7 +8,8 @@ import {createGunzip,createInflate,createBrotliDecompress} from 'node:zlib';
 import {performance} from 'node:perf_hooks';
 import {Transform,Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-// integrated api/_lib/instant-network.ts
+
+// INTEGRATED api/_lib/instant-network.ts
 
 const denied=new BlockList();
 for(const [address,prefix] of [
@@ -40,9 +41,13 @@ type PageResponse={
  decompressed_bytes?:number;truncated?:boolean;headers:Record<string,string>;
  reason?:string;redirects?:number;
 };
-type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAfterCapture?:boolean};
+type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAfterCapture?:boolean;allowedHost?:string};
 async function safeFetch(url:URL,start:number,redirects=0,options:FetchOptions={}):Promise<PageResponse>{
  if(redirects>3)throw Error('redirect_limit');
+ if(options.allowedHost){
+  const normalize=(name:string)=>name.toLowerCase().replace(/^www\\./,'');
+  if(normalize(url.hostname)!==normalize(options.allowedHost))throw Error('unsafe_cross_site_redirect');
+ }
  if(performance.now()-start>(options.deadline??TOTAL_BUDGET))throw Error('scan_deadline');
  if(!['https:','http:'].includes(url.protocol)||url.port||url.username||url.password||isIP(url.hostname))throw Error('unsafe_destination');
  if(url.href.length>2100)throw Error('url_too_long');
@@ -128,7 +133,113 @@ async function safeFetch(url:URL,start:number,redirects=0,options:FetchOptions={
 }
 
 
-// integrated api/_lib/instant-evidence.ts
+// INTEGRATED api/_lib/instant-render.ts
+
+type RenderedPage={html:string;url:string;duration_ms:number;requests:number;bytes:number;complete:boolean;source:'browser'};
+type SafeRendererFetcher=(url:URL,start:number,redirects?:number,options?:FetchOptions)=>Promise<PageResponse>;
+const RENDER_MAX_REQUESTS=18;
+const RENDER_MAX_BYTES=6_000_000;
+const RENDER_MAX_MS=9_000;
+// Per-instance upper bound. Distributed scan claims already serialize per domain.
+let activeRenders=0;
+
+function sameRenderHost(candidate:URL,base:URL){
+ const normalize=(s:string)=>s.toLowerCase().replace(/^www\./,'');
+ return ['http:','https:'].includes(candidate.protocol) && !candidate.username&&!candidate.password&&!candidate.port&&
+  normalize(candidate.hostname)===normalize(base.hostname)&&!isIP(candidate.hostname);
+}
+async function publicRenderDestination(target:URL,base:URL,resolver=lookup){
+ if(!sameRenderHost(target,base))return false;
+ try{
+  const results=await resolver(target.hostname,{all:true,family:4,verbatim:true});
+  return results.length>0&&results.every((item:any)=>publicIPv4(item.address));
+ }catch{return false;}
+}
+
+// Browser HTTP is always fulfilled by the existing DNS-pinned, bounded server fetcher.
+// No route.continue() or native browser network access is permitted.
+async function renderJavaScriptPage(
+ website:URL,fetcher:SafeRendererFetcher,started:number,
+ launch?:()=>Promise<any>
+):Promise<RenderedPage|null>{
+ if(process.env.INSTANT_RENDER_FALLBACK!=='true'&&!launch)return null;
+ if(activeRenders>=1)return null;
+ activeRenders++;
+ const begin=performance.now();let browser:any;
+ let requests=0,bytes=0;let overBudget=false;
+ // Avoid downloading browsers at runtime. Chromium ships with the function.
+ try{
+  const launchBrowser=launch||(async()=>{
+   const [{default:puppeteer},{default:chromium}]=await Promise.all([
+    import('puppeteer-core'),import('@sparticuz/chromium')
+   ]);
+   return puppeteer.launch({
+    executablePath:await chromium.executablePath(),
+    args:[...chromium.args,'--disable-background-networking','--disable-extensions','--disable-sync','--no-first-run'],
+    headless:true,timeout:3500,protocolTimeout:5500
+   });
+  });
+  browser=await Promise.race([
+   launchBrowser(),
+   new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('browser_launch_deadline')),4000))
+  ]);
+  const page=await browser.newPage();
+  await page.setCacheEnabled(false);
+  await page.setBypassServiceWorker(true);
+  await page.setRequestInterception(true);
+  await page.evaluateOnNewDocument(()=>{
+   // Disable browser APIs that can bypass HTTP interception.
+   Object.defineProperty(window,'WebSocket',{value:class {constructor(){throw Error('disabled');}}});
+   Object.defineProperty(window,'EventSource',{value:class {constructor(){throw Error('disabled');}}});
+   Object.defineProperty(window,'RTCPeerConnection',{value:class {constructor(){throw Error('disabled');}}});
+   Object.defineProperty(window,'Worker',{value:class {constructor(){throw Error('disabled');}}});
+   Object.defineProperty(window,'SharedWorker',{value:class {constructor(){throw Error('disabled');}}});
+   if('sendBeacon' in navigator)Object.defineProperty(navigator,'sendBeacon',{value:()=>false});
+  });
+  page.on('request',async (request:any)=>{
+   const abort=async()=>{try{await request.abort('blockedbyclient')}catch{}};
+   try{
+    if(overBudget||performance.now()-begin>RENDER_MAX_MS)return await abort();
+    if(!['GET','HEAD'].includes(request.method()))return await abort();
+    if(['image','media','font','stylesheet'].includes(request.resourceType()))return await abort();
+    const target=new URL(request.url());
+    if(!await publicRenderDestination(target,website))return await abort();
+    if(++requests>RENDER_MAX_REQUESTS){overBudget=true;return await abort();}
+    // The original scanner performs pinned DNS lookup, rejects non-public addresses
+    // and validates every redirect. allowedHost closes cross-site redirect escape.
+    const result=await fetcher(target,started,0,{
+     deadline:Math.min(21_000,Math.ceil(performance.now()-started)+4000),
+     maxCapture:500_000,stopAfterCapture:true,allowedHost:website.hostname
+    });
+    if(!sameRenderHost(new URL(result.url),website))return await abort();
+    bytes+=result.bytes;
+    if(bytes>RENDER_MAX_BYTES){overBudget=true;return await abort();}
+    await request.respond({
+     status:result.status,
+     contentType:result.type||'text/plain',
+     body:result.body,
+     headers:{'access-control-allow-origin':'*','cache-control':'no-store'}
+    });
+   }catch{await abort();}
+  });
+  page.on('popup',async (popup:any)=>{try{await popup.close()}catch{}});
+  await page.setDefaultNavigationTimeout(6000);
+  await page.goto(website.href,{waitUntil:'domcontentloaded',timeout:6000});
+  // React hydration is bounded: no networkidle, which can wait forever.
+  await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(0,RENDER_MAX_MS-(performance.now()-begin)))));
+  const html=await page.content();
+  const finalUrl=new URL(page.url());
+  if(!sameRenderHost(finalUrl,website)||html.length>1_000_000||html.length<100||overBudget)return null;
+  return {html,url:page.url(),requests,bytes,duration_ms:Math.round(performance.now()-begin),complete:true,source:'browser'};
+ }catch{return null;
+ }finally{
+  if(browser)try{await Promise.race([browser.close(),new Promise(r=>setTimeout(r,700))])}catch{}
+  activeRenders--;
+ }
+}
+
+
+// INTEGRATED api/_lib/instant-evidence.ts
 // Bounded HTML tokenizer: no scripting, no DOM/browser, no remote dependencies.
 // Extracts only explicit evidence; never infers missing fields from a truncated document.
 type Evidence={
@@ -268,7 +379,7 @@ function schemaHasType(n:any,needle:string){
 }
 
 
-// integrated api/_lib/instant-crawlers.ts
+// INTEGRATED api/_lib/instant-crawlers.ts
 type RobotsVerdict='allowed'|'blocked'|'unverified';
 const ROBOTS_AGENTS=['GPTBot','OAI-SearchBot','ChatGPT-User','ClaudeBot','Claude-Web','Google-Extended','PerplexityBot'] as const;
 type Group={agents:string[];rules:{allow:boolean;pattern:string}[]};
@@ -335,7 +446,7 @@ const PROBE_AGENTS=[
 ] as const;
 
 
-// integrated api/_lib/instant-validation.ts
+// INTEGRATED api/_lib/instant-validation.ts
 // Evidence-based JSON-LD validation. Each check depends on related properties within
 // the same typed entity, not on keywords or properties elsewhere in the graph.
 const BUSINESS_TYPES=new Set(['organization','localbusiness','store','plumber','hvacbusiness','homeandconstructionbusiness','professionalservice','corporation','restaurant','bakery','roofingcontractor','electrician','generalcontractor','automotiverepair','foodestablishment']);
@@ -404,7 +515,7 @@ function validateCanonical(canonical:string,site:URL,finalPageUrl?:string){
 }
 
 
-// integrated api/_lib/instant-checker.ts
+// INTEGRATED api/_lib/instant-checker.ts
 
 type Verdict='pass'|'fail'|'unverified';
 type Check={id:string;category:string;label:string;points:number;status:Verdict;evidence:string};
@@ -470,7 +581,8 @@ function evidenceReason(page:PageResponse|null,error:string|undefined,subject:st
  return subject+': HTTP '+page.status+(page.truncated?' (bounded partial content)':'');
 }
 
-async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
+type RenderCallback=(url:URL,fetcher:SafeRendererFetcher,start:number)=>Promise<RenderedPage|null>;
+async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer?:RenderCallback){
  const url=validateWebsite(raw),started=performance.now();
  const checks:Check[]=[];
  const errors:Record<string,string>={};
@@ -498,15 +610,47 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  const jobs=[fetchOne('/'),fetchOne('/robots.txt'),fetchOne('/llms.txt'),
   ...PROBE_AGENTS.map(probe=>fetchOne('/',probe.value))];
  const [home,robots,llms,...probePages]=await Promise.all(jobs);
- const htmlAvailable=usableHtml(home),evidence:Evidence=htmlAvailable?
+ const htmlAvailable=usableHtml(home),rawEvidence:Evidence=htmlAvailable?
   parseHtml(home.body,!!home.truncated):parseHtml('',true);
- const nodes=schemaNodes(evidence.schema);
  const htmlFinal=htmlAvailable&&!home.truncated;
+ const bodyReadable=rawEvidence.text.length>=300||rawEvidence.appData.join(' ').length>=300;
+ const jsDependent=rawEvidence.jsShell||(htmlAvailable&&!bodyReadable&&(home?.body.match(/<script\b/gi)||[]).length>=2);
+ let rendered:RenderedPage|null=null;
+ let rendering:'not_needed'|'disabled'|'complete'|'failed'=jsDependent?'disabled':'not_needed';
+ if(jsDependent&&htmlAvailable){
+  let activeRenderer=renderer;
+  if(!activeRenderer&&process.env.INSTANT_RENDER_FALLBACK==='true'){
+   activeRenderer=renderJavaScriptPage;
+  }
+  if(activeRenderer){
+   try{rendered=await activeRenderer(url,fetcher,started);}catch{rendered=null;}
+   rendering=rendered?.complete?'complete':'failed';
+  }
+ }
+ const renderedEvidence=rendered?.complete?parseHtml(rendered.html,false):null;
+ // Raw crawler permissions/probes are never replaced with browser DOM evidence.
+ const evidence:Evidence=renderedEvidence?{
+  ...rawEvidence,
+  title:rawEvidence.title||renderedEvidence.title,
+  description:rawEvidence.description||renderedEvidence.description,
+  canonical:rawEvidence.canonical||renderedEvidence.canonical,
+  schema:[...rawEvidence.schema,...renderedEvidence.schema.filter(x=>
+   !rawEvidence.schema.some(y=>JSON.stringify(y)===JSON.stringify(x)))],
+  h1:renderedEvidence.h1.length?renderedEvidence.h1:rawEvidence.h1,
+  headings:renderedEvidence.headings.length?renderedEvidence.headings:rawEvidence.headings,
+  text:renderedEvidence.text.length>rawEvidence.text.length?renderedEvidence.text:rawEvidence.text,
+  aboutLinks:[...new Set([...rawEvidence.aboutLinks,...renderedEvidence.aboutLinks])],
+  services:[...new Set([...rawEvidence.services,...renderedEvidence.services])],
+  appData:[...new Set([...rawEvidence.appData,...renderedEvidence.appData])],
+  noindex:rawEvidence.noindex||renderedEvidence.noindex,
+  jsShell:false,
+  truncated:false
+ }:rawEvidence;
+ const nodes=schemaNodes(evidence.schema);
  const title=evidence.title,description=evidence.description;
- const bodyReadable=evidence.text.length>=300||evidence.appData.join(' ').length>=300;
- const jsDependent=evidence.jsShell||(htmlAvailable&&!bodyReadable&&(home?.body.match(/<script\b/gi)||[]).length>=2);
+ const contentVerified=(htmlFinal&&!jsDependent)||!!renderedEvidence;
  const absent=(confirmed:boolean):Verdict=>confirmed?'fail':'unverified';
- const contentMissing=(found:boolean):Verdict=>found?'pass':absent(htmlFinal&&!jsDependent);
+ const contentMissing=(found:boolean):Verdict=>found?'pass':absent(contentVerified);
  const effectiveRobots=robots?.status===200&&!robots.type.includes('html')&&!/^\s*</.test(robots.body)&&!robots.truncated;
  const robotsAbsent=robots&&[404,410].includes(robots.status);
  const robotsRules:Record<string,string>={};
@@ -549,7 +693,7 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  add('C2','Semantic structure','Meta description',4,description.length>=40?'pass':contentMissing(false),
   description.slice(0,150)||'Description not found in response');
  add('C3','Semantic structure','Primary H1 heading',5,evidence.h1.length===1?'pass':
-  evidence.h1.length>1&&htmlFinal?'fail':contentMissing(false),
+  evidence.h1.length>1&&contentVerified?'fail':contentMissing(false),
   evidence.h1.length?evidence.h1.length+' H1 heading(s)':'No confirmed H1 in collected HTML');
  add('C4','Semantic structure','Heading hierarchy',3,
   evidence.headings.length>0&&evidence.headings.every((h,i)=>i===0||h<=evidence.headings[i-1]+1)?'pass':
@@ -617,7 +761,7 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   evidence.canonical?evidence.canonical.slice(0,150)+' ('+canonicalCheck.reason+')':'No canonical verified');
  const headerNoindex=/\bnoindex\b/i.test(home?.headers['x-robots-tag']||'');
  add('F4','Technical health','Homepage indexability signals',2,
-  headerNoindex||evidence.noindex?'fail':htmlFinal?'pass':'unverified',
+  headerNoindex||evidence.noindex?'fail':contentVerified?'pass':'unverified',
   headerNoindex||evidence.noindex?'Explicit noindex directive':'Noindex not found in complete HTML');
 
  const probes:Record<string,any>={};
@@ -641,9 +785,10 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  return {
   domain:url.hostname,url:url.href,scanned_at:new Date().toISOString(),
   elapsed_ms:Math.round(performance.now()-started),
-  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0),
+  bytes_fetched:networkEvents.reduce((n,x)=>n+(x.decompressed_bytes||0),0)+(rendered?.bytes||0),
   wire_bytes:networkEvents.reduce((n,x)=>n+(x.wire_bytes||0),0),
-  request_count:networkEvents.length,js_dependent:jsDependent,checks,...score,
+  request_count:networkEvents.length+(rendered?.requests||0),js_dependent:jsDependent,checks,...score,
+  rendering:{status:rendering,elapsed_ms:rendered?.duration_ms||0,requests:rendered?.requests||0,bytes:rendered?.bytes||0},
   robots_rules:robotsRules,probes,network_errors:errors,network_events:networkEvents,
   summary:{strengths,weaknesses,uncertain,unverified_count:checks.length-verified.length},
   provisional,version:'instant-v1.0',
@@ -653,7 +798,7 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
 }
 
 
-// integrated api/_lib/instant-badge.ts
+// INTEGRATED api/_lib/instant-badge.ts
 const BADGE_STYLES=['dark','light','shield','seal'] as const;
 type BadgeStyle=typeof BADGE_STYLES[number];
 const esc=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]||c));
@@ -699,7 +844,7 @@ export function publicResult(row:any){
   crawlerAccess:r.crawlerAccess,checks:Array.isArray(r.checks)?r.checks.map((x:any)=>({id:x.id,category:x.category,label:x.label,points:x.points,status:x.status,evidence:typeof x.evidence==='string'?x.evidence.replace(/(?:ENOTFOUND|ECONNREFUSED|EHOSTUNREACH|ETIMEDOUT|EAI_AGAIN|ERR_[A-Z_]+|stream_error:[^ ]+)/g,'Connection or response could not be verified').slice(0,240):''})):[],js_dependent:r.js_dependent,
   elapsed_ms:r.elapsed_ms,request_count:r.request_count,bytes_fetched:r.bytes_fetched,
   disclaimer:r.disclaimer,llms_note:r.llms_note,
-  robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional};
+  robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional,rendering:r.rendering};
 }
 export function parseClaimToken(value:unknown):string|null{
  const m=typeof value==='string'?/^claimed:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(value):null;
