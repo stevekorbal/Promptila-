@@ -28,7 +28,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if(scanError)throw scanError;
   if(!scan||!['complete','incomplete'].includes(scan.status))return res.status(400).json({error:'Scan is not available.'});
   const {error:insertError}=await db.from('instant_scan_leads').insert({
-   scan_id:scan.id,full_name:name,business_email:email,company_name:company,role_title:role,consent:true
+   scan_id:scan.id,full_name:name,business_email:email,company_name:company,role_title:role,consent:true,marketing_consent:req.body?.marketing_consent===true
   });
   if(insertError)throw insertError;
   return res.status(200).json({success:true,message:'Your request has been recorded. No paid plan has been activated.'});
