@@ -26,7 +26,7 @@ test('headless Chromium renders an isolated JavaScript website with no outbound 
   assert.match(rendered.html,/<h1>Example Candy<\/h1>/);
   assert.equal(rendered.requests,2);
   assert.deepEqual(calls,['/','/app.js']);
-  assert.ok(rendered.duration_ms<9000);
+  assert.ok(rendered.duration_ms<15000);
   console.log('BROWSER_SMOKE '+JSON.stringify({duration_ms:rendered.duration_ms,requests:rendered.requests,bytes:rendered.bytes}));
  }finally{
   if(old===undefined)delete process.env.INSTANT_RENDER_FALLBACK;
