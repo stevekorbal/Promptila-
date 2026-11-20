@@ -47,7 +47,7 @@ function identifiableBrand(value:string):boolean{
 }
 function usableHtml(page:PageResponse|null):page is PageResponse{
  if(!page||page.status<200||page.status>=300||!page.type.includes('html'))return false;
- const title=(page.body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]||'').trim();
+ const title=(page.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').trim();
  return !/^(just a moment|checking your browser|verify you are human|access denied|attention required)/i.test(title);
 }
 function safeSameSite(candidate:string,base:URL):URL|null{
