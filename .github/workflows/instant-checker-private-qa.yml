@@ -24,6 +24,8 @@ jobs:
         run: npm ls @babel/parser @babel/traverse @babel/core @vitejs/plugin-react
       - run: npx tsx --test tests/instant-checker.test.ts tests/instant-checker-concurrency.test.ts tests/instant-checker-render.test.ts
       - run: npm run lint
+      - name: Real headless Chromium isolated hydration and SSRF smoke
+        run: npx tsx --test tests/instant-render-browser.test.ts
       - run: npm run build
       - run: npx tsx tests/instant-checker-live.ts
       - uses: actions/upload-artifact@v4
