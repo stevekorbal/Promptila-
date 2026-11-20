@@ -13,6 +13,7 @@ for(const [i,row] of testData.slice(0,6).entries()){
   categories:row.category_scores,engines:row.engine_estimates,
   crawlerAccess:Object.fromEntries([['ChatGPT','A1'],['Claude','A2'],['Perplexity','A3'],['Gemini / Google-Extended','A4']].map(([name,id])=>[name,(row.check_results.find(x=>x.id===id)?.status==='pass'?'Allowed':row.check_results.find(x=>x.id===id)?.status==='fail'?'Blocked':'Unverified')])),
   checks:row.check_results,js_dependent:row.js_dependent,elapsed_ms:row.elapsed_ms,
+  provisional:row.provisional,summary:row.summary,robots_rules:row.robots_rules,probes:row.probes,
   disclaimer:'Website-signal readiness estimates only. No AI models were queried. These do not measure actual AI recommendations or rankings.',
   llms_note:'llms.txt is voluntary and not a requirement for AI recommendations.'
  };
