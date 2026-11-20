@@ -16,7 +16,21 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm install --no-package-lock --ignore-scripts --no-audit --no-fund
+      - name: Diagnose Babel version resolution
+        run: |
+          echo "npm version $(npm --version)"
+          echo "registry $(npm config get registry)"
+          npm view @babel/parser@7.29.14 version
+          npm view @babel/core@7.29.15 dependencies --json || true
+          npm view @babel/traverse@7.29.15 dependencies --json || true
+          npm view @babel/parser@7.29.15 version || true
+      - name: Install dependencies (diagnostic)
+        run: |
+          npm install --no-package-lock --ignore-scripts --no-audit --no-fund --loglevel=verbose || {
+            echo "RESOLUTION ERROR EXTRACT"
+            grep -E "ETARGET|@babel/parser|@babel/core|@babel/traverse|fetch manifest" /home/runner/.npm/_logs/*debug-0.log | tail -n 75 || true
+            exit 1
+          }
       - run: npx tsx --test tests/instant-checker.test.ts
       - run: npm run lint
       - run: npm run build
