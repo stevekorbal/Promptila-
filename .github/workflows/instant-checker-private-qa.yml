@@ -5,7 +5,7 @@ on:
       - feature/instant-checker-phase1-private
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   safety-and-build:
     runs-on: ubuntu-latest
@@ -16,21 +16,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Diagnose Babel version resolution
+      - name: Repair package lockfile for reproducible install (private branch only)
         run: |
-          echo "npm version $(npm --version)"
-          echo "registry $(npm config get registry)"
-          npm view @babel/parser@7.29.14 version
-          npm view @babel/core@7.29.15 dependencies --json || true
-          npm view @babel/traverse@7.29.15 dependencies --json || true
-          npm view @babel/parser@7.29.15 version || true
-      - name: Install dependencies (diagnostic)
-        run: |
-          npm install --no-package-lock --ignore-scripts --no-audit --no-fund --loglevel=verbose || {
-            echo "RESOLUTION ERROR EXTRACT"
-            grep -E "ETARGET|@babel/parser|@babel/core|@babel/traverse|fetch manifest" /home/runner/.npm/_logs/*debug-0.log | tail -n 75 || true
-            exit 1
-          }
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+          git diff --stat -- package-lock.json
+          git status --short
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Synchronize lockfile for reproducible instant checker QA"
+            git push origin HEAD:feature/instant-checker-phase1-private
+          fi
       - run: npx tsx --test tests/instant-checker.test.ts
       - run: npm run lint
       - run: npm run build
