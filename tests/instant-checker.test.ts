@@ -1,3 +1,4 @@
+import {instantAccessAllowed} from '../api/_lib/instant-access.ts';
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
 import { badgeSvg,BADGE_STYLES } from '../api/instant-checker-badge.ts';
@@ -176,14 +177,16 @@ test('private diagnostics never appear in public report projection',()=>{
 
 test('lead endpoint rejects missing consent and invalid email before any database write',async()=>{
  const old=process.env.INSTANT_CHECKER_ENABLED;
+ const oldToken=process.env.INSTANT_CHECKER_TEST_TOKEN;
  process.env.INSTANT_CHECKER_ENABLED='true';
+ process.env.INSTANT_CHECKER_TEST_TOKEN='test-secret-at-least-32-characters-long-123456';
  try{
   async function request(body:any){
    const response:any={statusCode:200,body:null,headers:{}};
    response.setHeader=(key:string,value:string)=>{response.headers[key]=value;return response;};
    response.status=(code:number)=>{response.statusCode=code;return response;};
    response.json=(body:any)=>{response.body=body;return response;};
-   const req:any={method:'POST',body};
+   const req:any={method:'POST',body,headers:{'x-instant-test-token':process.env.INSTANT_CHECKER_TEST_TOKEN}};
    await submitLead(req,response);
    return response;
   }
@@ -193,6 +196,7 @@ test('lead endpoint rejects missing consent and invalid email before any databas
  }finally{
   if(old===undefined)delete process.env.INSTANT_CHECKER_ENABLED;
   else process.env.INSTANT_CHECKER_ENABLED=old;
+  if(oldToken===undefined)delete process.env.INSTANT_CHECKER_TEST_TOKEN;else process.env.INSTANT_CHECKER_TEST_TOKEN=oldToken;
  }
 });
 test('lead endpoint remains inaccessible while feature flag is disabled',async()=>{
@@ -201,4 +205,14 @@ test('lead endpoint remains inaccessible while feature flag is disabled',async()
  const res:any={code:200,setHeader(){},status(code:number){this.code=code;return this;},json(){return this;}};
  try{await submitLead({method:'POST',body:{}} as any,res);assert.equal(res.code,404);}
  finally{if(old!==undefined)process.env.INSTANT_CHECKER_ENABLED=old;}
+});
+
+test('private tester access must be enabled, correct, and server configured',()=>{
+ const key='a-secure-private-flagged-tester-key-longer-than-32';
+ const env={INSTANT_CHECKER_ENABLED:'true',INSTANT_CHECKER_TEST_TOKEN:key} as NodeJS.ProcessEnv;
+ assert.equal(instantAccessAllowed({'x-instant-test-token':key},env),true);
+ assert.equal(instantAccessAllowed({},env),false);
+ assert.equal(instantAccessAllowed({'x-instant-test-token':'invalid'},env),false);
+ assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_ENABLED:'false'}),false);
+ assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_TEST_TOKEN:''}),false);
 });
