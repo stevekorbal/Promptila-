@@ -37,11 +37,16 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  // A dependency-free route establishes whether Vercel can start this function.
  // No secrets, config status, database access or private information are exposed.
  if(req.method==='GET'&&req.query.health==='1')return res.status(200).json({status:'ok'});
+ let stage:'module_load'|'input_validation'|'database_setup'|'report_read'|'scan_claim'|'scan_execution'|'scan_commit'='module_load';
  try{
   const {scanWebsite,validateWebsite}=await import('./_lib/instant-checker.ts');
+  stage='input_validation';
   const url=validateWebsite(req.method==='GET'?req.query.domain:req.body?.website);
-  const domain=url.hostname;const db=await database();
+  const domain=url.hostname;
+  stage='database_setup';
+  const db=await database();
   if(req.method==='GET'){
+   stage='report_read';
    const badgeMode=req.query.badge==='1';
    const {data,error}=await db.from('instant_scans').select('result,status,expires_at').eq('domain',domain).maybeSingle();
    if(error)throw error;
@@ -62,6 +67,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
    if(!data||!data.result)return res.status(404).json({error:'No report available.'});
    return res.status(200).json({report:publicResult(data),stale:!data.expires_at||new Date(data.expires_at).getTime()<=Date.now()});
   }
+  stage='scan_claim';
   const remote=String(req.headers['x-vercel-forwarded-for']||req.socket.remoteAddress||'unknown').slice(0,128);
   const salt=process.env.INSTANT_CHECKER_RATE_SALT;
   if(!salt||salt.length<24)return res.status(503).json({error:'Rate limiter not configured.'});
@@ -106,8 +112,12 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if(/valid website|public DNS|unsafe|Invalid hostname|Only public|Only a public|URL too long/i.test(message))return res.status(400).json({error:'Enter a valid public website URL.'});
   // Structured public diagnostic codes, without exposing secrets or upstream details.
   const code=message==='checker_configuration_missing'?'configuration_missing':
-    /invalid api key|jwt|permission denied|relation .* does not exist|Could not find the function|fetch failed|connect|PGRST|ECONN|ENOTFOUND/i.test(message)?'database_unavailable':'server_unavailable';
-  console.error('Instant checker unavailable',code,message.slice(0,160));
+    stage==='module_load'?'scanner_module_unavailable':
+    stage==='database_setup'?'database_configuration_or_client_error':
+    stage==='scan_claim'?'scan_claim_error':
+    stage==='report_read'?'report_read_error':
+    stage==='input_validation'?'input_validation_error':'server_unavailable';
+  console.error('Instant checker unavailable',code,'stage='+stage,message.slice(0,160));
   return res.status(503).json({error:'Checker temporarily unavailable.',code});
  }
 }
