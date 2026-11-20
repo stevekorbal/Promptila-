@@ -20,6 +20,8 @@ export default function AIVisibilityChecker(){
  const {domain:reportDomain}=useParams<{domain?:string}>();
  const [website,setWebsite]=useState('');
  const [testerToken,setTesterToken]=useState('');
+ const publicMode=import.meta.env.VITE_INSTANT_CHECKER_PUBLIC==='true';
+ const authHeaders=publicMode?{}:{'x-instant-test-token':testerToken};
  const [badgePreview,setBadgePreview]=useState('');
  const [report,setReport]=useState<Report|null>(null);
  const [loading,setLoading]=useState(false);
@@ -40,19 +42,19 @@ export default function AIVisibilityChecker(){
   return()=>clearInterval(handle);
  },[loading]);
  useEffect(()=>{
-  if(!reportDomain||testerToken.length<32)return;
+  if(!reportDomain||(!publicMode&&testerToken.length<32))return;
   let live=true;setLoading(true);setError('');setReport(null);
-  fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain),{headers:{'x-instant-test-token':testerToken}})
+  fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain),{headers:authHeaders})
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Report unavailable');return d;})
    .then(d=>{if(live){setReport(d.report);setStale(Boolean(d.stale));}})
    .catch(e=>{if(live)setError(e.message);})
    .finally(()=>{if(live)setLoading(false);});
   return()=>{live=false;};
- },[reportDomain,testerToken]);
+ },[reportDomain,testerToken,publicMode]);
  async function submit(e:React.FormEvent){
   e.preventDefault();setLoading(true);setError('');setReport(null);setCached(false);setLeadStatus('');
   try{
-   const r=await fetch('/api/instant-checker',{method:'POST',headers:{'content-type':'application/json','x-instant-test-token':testerToken},body:JSON.stringify({website})});
+   const r=await fetch('/api/instant-checker',{method:'POST',headers:{'content-type':'application/json',...authHeaders},body:JSON.stringify({website})});
    const d=await r.json();
    if(r.status===202)throw Error('A scan is already running for this website. Open its report shortly.');
    if(!r.ok)throw Error(d.error||'Unable to scan website');
@@ -74,7 +76,7 @@ export default function AIVisibilityChecker(){
  const badgeSrc=report?window.location.origin+'/api/instant-checker-badge?domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
  const badge=report&&report.status==='complete'&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
  useEffect(()=>{
-  if(!report||report.status!=='complete'||stale||testerToken.length<32){setBadgePreview('');return;}
+  if(!report||report.status!=='complete'||stale||(!publicMode&&testerToken.length<32)){setBadgePreview('');return;}
   let live=true;let objectUrl='';
   fetch('/api/instant-checker-badge?domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle,
     {headers:{'x-instant-test-token':testerToken}})
@@ -82,7 +84,7 @@ export default function AIVisibilityChecker(){
    .then(blob=>{if(!live)return;objectUrl=URL.createObjectURL(blob);setBadgePreview(objectUrl);})
    .catch(()=>{if(live)setBadgePreview('');});
   return()=>{live=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
- },[report?.domain,report?.status,badgeStyle,stale,testerToken]);
+ },[report?.domain,report?.status,badgeStyle,stale,testerToken,publicMode]);
  return <div className="bg-slate-50 min-h-screen pt-32 pb-20">
   <div className="max-w-5xl mx-auto px-4 sm:px-6">
    <div className="text-center mb-10">
@@ -90,13 +92,12 @@ export default function AIVisibilityChecker(){
     <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 mt-5">How ready is your website for AI search?</h1>
     <p className="text-slate-600 max-w-2xl mx-auto mt-4">Get a free technical website-readiness check. No account or paid AI model requests.</p>
    </div>
-   <label className="block max-w-xl mx-auto mb-5 text-sm font-semibold text-slate-700">Private tester access key
+   {!publicMode&&<label className="block max-w-xl mx-auto mb-5 text-sm font-semibold text-slate-700">Private tester access key
      <input type="password" autoComplete="off" value={testerToken} onChange={e=>setTesterToken(e.target.value)} placeholder="Access key supplied by Promptila" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 bg-white" />
-     <span className="block mt-1 text-xs text-slate-500">Access is checked on the server for scans, reports, leads and badges. This private test key is never included in shared URLs.</span>
-    </label>
+    </label>}
    {!reportDomain&&<form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 sm:p-8 flex flex-col sm:flex-row gap-3 mb-8">
     <input className={input} type="text" required maxLength={2048} value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://yourbusiness.com" aria-label="Website URL"/>
-    <button disabled={loading||testerToken.length<32} className="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">{loading?'Checking website…':'Check my website'}</button>
+    <button disabled={loading||(!publicMode&&testerToken.length<32)} className="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">{loading?'Checking website…':'Check my website'}</button>
    </form>}
    {loading&&<div role="status" className="bg-white rounded-xl border p-6 mb-6 text-indigo-700 flex items-center gap-3"><Search className="animate-pulse"/>Inspecting website HTML, crawler permissions and technical signals. {elapsed} seconds elapsed; no simulated progress percentage.</div>}
    {error&&<div role="alert" className="rounded-xl p-4 bg-amber-50 text-amber-900 border border-amber-200 mb-7">{error}</div>}
@@ -171,9 +172,9 @@ export default function AIVisibilityChecker(){
      </div>
      {report.status==='complete'&&!stale?<div className="mt-6">
       <h4 className="font-bold text-slate-900">Optional embeddable badge</h4>
-      <p className="text-slate-600 mt-2 text-sm">Select a design. The embed works externally only after public launch approval; previews currently require private tester authorization. No AI certification is implied.</p>
+      <p className="text-slate-600 mt-2 text-sm">Select a design. The badge is public only when the production checker is activated. No AI certification is implied.</p>
       <div className="flex gap-2 flex-wrap mt-4">{badgeStyles.map(style=><button type="button" key={style} onClick={()=>setBadgeStyle(style)} aria-pressed={badgeStyle===style} className={'rounded-lg border px-4 py-2 capitalize text-sm font-semibold '+(badgeStyle===style?'bg-indigo-600 text-white':'bg-white text-slate-700')}>{style}</button>)}</div>
-      {badgePreview?<img src={badgePreview} alt={'Promptila '+badgeStyle+' style readiness badge'} className="mt-4 max-w-full" width={320} height={90}/>:<p className="mt-4 text-sm text-slate-600">Private badge preview requires verified tester access.</p>}
+      {badgePreview?<img src={badgePreview} alt={'Promptila '+badgeStyle+' style readiness badge'} className="mt-4 max-w-full" width={320} height={90}/>:<p className="mt-4 text-sm text-slate-600">Badge preview is unavailable.</p>}
       <label className="block font-semibold text-sm mt-4 text-slate-800">Copy embed code<textarea readOnly rows={3} className="w-full border rounded-lg p-3 mt-2 font-mono text-xs" value={badge}/></label>
       <button type="button" className="border rounded-lg px-4 py-2 text-sm font-semibold mt-2" onClick={()=>navigator.clipboard.writeText(badge)}>Copy badge embed code</button>
      </div>:<p className="text-xs text-amber-800 mt-4">A verified score badge is available only for complete, current reports.</p>}
