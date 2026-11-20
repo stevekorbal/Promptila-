@@ -73,12 +73,12 @@ export default function AIVisibilityChecker(){
  }
  const input='w-full rounded-xl border border-slate-300 px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
  const fullLink=report?window.location.origin+reportUrl(report.domain):'';
- const badgeSrc=report?window.location.origin+'/api/instant-checker-badge?domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
+ const badgeSrc=report?window.location.origin+'/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
  const badge=report&&report.status==='complete'&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
  useEffect(()=>{
   if(!report||report.status!=='complete'||stale||(!publicMode&&testerToken.length<32)){setBadgePreview('');return;}
   let live=true;let objectUrl='';
-  fetch('/api/instant-checker-badge?domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle,
+  fetch('/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle,
     {headers:{'x-instant-test-token':testerToken}})
    .then(async response=>{if(!response.ok)throw Error('Unavailable badge');return response.blob();})
    .then(blob=>{if(!live)return;objectUrl=URL.createObjectURL(blob);setBadgePreview(objectUrl);})
