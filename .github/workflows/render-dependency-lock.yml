@@ -1,0 +1,25 @@
+name: Generate browser fallback dependency lock (artifact only)
+on:
+  push:
+    branches: [feature/instant-checker-render-fallback]
+    paths:
+      - package.json
+      - .github/workflows/render-dependency-lock.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve exact Chromium and Puppeteer dependency lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instant-render-lock
+          path: package-lock.json
