@@ -37,9 +37,13 @@ export type PageResponse={
  decompressed_bytes?:number;truncated?:boolean;headers:Record<string,string>;
  reason?:string;redirects?:number;
 };
-export type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAfterCapture?:boolean};
+export type FetchOptions={userAgent?:string;maxCapture?:number;deadline?:number;stopAfterCapture?:boolean;allowedHost?:string};
 export async function safeFetch(url:URL,start:number,redirects=0,options:FetchOptions={}):Promise<PageResponse>{
  if(redirects>3)throw Error('redirect_limit');
+ if(options.allowedHost){
+  const normalize=(name:string)=>name.toLowerCase().replace(/^www\\./,'');
+  if(normalize(url.hostname)!==normalize(options.allowedHost))throw Error('unsafe_cross_site_redirect');
+ }
  if(performance.now()-start>(options.deadline??TOTAL_BUDGET))throw Error('scan_deadline');
  if(!['https:','http:'].includes(url.protocol)||url.port||url.username||url.password||isIP(url.hostname))throw Error('unsafe_destination');
  if(url.href.length>2100)throw Error('url_too_long');
