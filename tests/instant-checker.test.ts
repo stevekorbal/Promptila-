@@ -53,6 +53,10 @@ test('JS application shell keeps unreadable evidence unverified and has no score
  assert.equal(result.js_dependent,true);
  assert.equal(result.status,'incomplete');
  assert.equal(result.score,null);
+ assert.equal(result.provisional.minimum,result.provisional.verified_points);
+ assert.equal(result.provisional.maximum,result.provisional.minimum+result.provisional.unknown_points);
+ assert.equal(result.provisional.is_provisional,true);
+ assert.equal(result.engines.ChatGPT,null);
  assert.equal(result.checks.find(x=>x.id==='C3')?.status,'unverified');
  assert.equal(result.checks.find(x=>x.id==='D2')?.status,'unverified');
 });
