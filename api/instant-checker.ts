@@ -1,13 +1,11 @@
-import {badgeSvg,BADGE_STYLES,type BadgeStyle} from './_lib/instant-badge.ts';
 import type { VercelRequest,VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { scanWebsite,validateWebsite } from './_lib/instant-checker.ts';
 export const config={maxDuration:60};
-function database(){
+async function database(){
  const url=(process.env.SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!url||!key)throw Error('Service not configured');
+ const {createClient}=await import('@supabase/supabase-js');
  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
 export function publicResult(row:any){
@@ -36,21 +34,26 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('X-Content-Type-Options','nosniff');
  if(!['POST','GET'].includes(req.method||''))return res.status(405).json({error:'Method not allowed'});
+ // A dependency-free route establishes whether Vercel can start this function.
+ // No secrets, config status, database access or private information are exposed.
+ if(req.method==='GET'&&req.query.health==='1')return res.status(200).json({status:'ok'});
  try{
+  const {scanWebsite,validateWebsite}=await import('./_lib/instant-checker.ts');
   const url=validateWebsite(req.method==='GET'?req.query.domain:req.body?.website);
-  const domain=url.hostname;const db=database();
+  const domain=url.hostname;const db=await database();
   if(req.method==='GET'){
    const badgeMode=req.query.badge==='1';
    const {data,error}=await db.from('instant_scans').select('result,status,expires_at').eq('domain',domain).maybeSingle();
    if(error)throw error;
    if(badgeMode){
+    const {badgeSvg,BADGE_STYLES}=await import('./_lib/instant-badge.ts');
     const style=typeof req.query.style==='string'?req.query.style:'dark';
-    if(!BADGE_STYLES.includes(style as BadgeStyle))return res.status(400).end();
+    if(!BADGE_STYLES.includes(style as (typeof BADGE_STYLES)[number]))return res.status(400).end();
     if(!data||data.status!=='complete'||data.result?.status!=='complete'||
       !Number.isInteger(data.result?.score)||!data.expires_at||
       new Date(data.expires_at).getTime()<=Date.now())return res.status(404).end();
     const origin=process.env.INSTANT_CHECKER_PUBLIC_ORIGIN||'https://www.promptila.com';
-    const svg=badgeSvg(domain,data.result.score,data.result.scanned_at,style as BadgeStyle,origin);
+    const svg=badgeSvg(domain,data.result.score,data.result.scanned_at,style as (typeof BADGE_STYLES)[number],origin);
     res.setHeader('Content-Type','image/svg+xml; charset=utf-8');
     res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; sandbox");
     res.setHeader('Cache-Control','public,max-age=300');
@@ -101,7 +104,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  }catch(error:any){
   const message=String(error?.message||'');
   if(/valid website|public DNS|unsafe|Invalid hostname|Only public|Only a public|URL too long/i.test(message))return res.status(400).json({error:'Enter a valid public website URL.'});
-  console.error('Instant checker unavailable',message.slice(0,100));
+  console.error('Instant checker unavailable',message.slice(0,160));
   return res.status(503).json({error:'Checker temporarily unavailable.'});
  }
 }
