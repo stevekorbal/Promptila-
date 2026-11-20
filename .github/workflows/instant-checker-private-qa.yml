@@ -5,7 +5,7 @@ on:
       - feature/instant-checker-phase1-private
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   safety-and-build:
     runs-on: ubuntu-latest
@@ -16,19 +16,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Repair package lockfile for reproducible install (private branch only)
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm ci --ignore-scripts --no-audit --no-fund
-          git diff --stat -- package-lock.json
-          git status --short
-          if ! git diff --quiet -- package-lock.json; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json
-            git commit -m "Synchronize lockfile for reproducible instant checker QA"
-            git push origin HEAD:feature/instant-checker-phase1-private
-          fi
+      - name: Reproducible clean install (committed lockfile)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify resolved Babel dependencies
+        run: npm ls @babel/parser @babel/traverse @babel/core @vitejs/plugin-react
       - run: npx tsx --test tests/instant-checker.test.ts
       - run: npm run lint
       - run: npm run build
@@ -38,20 +29,4 @@ jobs:
         with:
           name: instant-checker-private-results
           path: instant-checker-private-results.json
-          if-no-files-found: warn
-      - run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright
-      - run: npx playwright install chromium
-      - name: Capture private report screenshots
-        run: |
-          npm run dev > /tmp/instant-checker-dev.log 2>&1 &
-          for i in $(seq 1 25); do
-            curl -fsS http://127.0.0.1:3000/ai-visibility-checker > /dev/null && break
-            sleep 1
-          done
-          node tests/instant-checker-screenshots.mjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: instant-checker-private-screenshots
-          path: qa-screenshots/
           if-no-files-found: warn
