@@ -8,7 +8,7 @@ test('headless Chromium renders an isolated JavaScript website with no outbound 
  const old=process.env.INSTANT_RENDER_FALLBACK;
  process.env.INSTANT_RENDER_FALLBACK='true';
  const calls:string[]=[];
- const site=new URL('https://examplecandy.com/');
+ const site=new URL('https://example.com/');
  const fetcher=async (url:URL):Promise<PageResponse>=>{
   calls.push(url.pathname);
   let body='',type='text/html';
