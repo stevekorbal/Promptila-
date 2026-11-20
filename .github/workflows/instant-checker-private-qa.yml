@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/instant-checker-phase1-private
+      - main
   workflow_dispatch:
 permissions:
   contents: read
