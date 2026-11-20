@@ -219,8 +219,11 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  const verified=checks.filter(x=>x.status!=='unverified');
  const strengths=verified.filter(x=>x.status==='pass').slice(0,4).map(x=>x.label);
  const weaknesses=verified.filter(x=>x.status==='fail').slice(0,4).map(x=>x.label);
- const provisional={verified_points:verified.filter(x=>x.status==='pass').reduce((n,c)=>n+c.points,0),
-  unknown_points:checks.filter(x=>x.status==='unverified').reduce((n,c)=>n+c.points,0)};
+ const earnedPoints=verified.filter(x=>x.status==='pass').reduce((n,c)=>n+c.points,0);
+ const unknownPoints=checks.filter(x=>x.status==='unverified').reduce((n,c)=>n+c.points,0);
+ // This is an evidence bound, not an estimated final score; zero is never assigned to an unverified check.
+ const provisional={verified_points:earnedPoints,unknown_points:unknownPoints,
+  minimum:earnedPoints,maximum:Math.min(100,earnedPoints+unknownPoints),is_provisional:score.status==='incomplete'};
  return {
   domain:url.hostname,url:url.href,scanned_at:new Date().toISOString(),
   elapsed_ms:Math.round(performance.now()-started),
