@@ -1,10 +1,11 @@
+import {instantAccessAllowed} from './_lib/instant-access.ts';
 import type {VercelRequest,VercelResponse} from '@vercel/node';
 import {createClient} from '@supabase/supabase-js';
 import {createHash} from 'node:crypto';
 import {validateWebsite} from './_lib/instant-checker.ts';
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
- if(process.env.INSTANT_CHECKER_ENABLED!=='true')return res.status(404).json({error:'Unavailable'});
+ if(!instantAccessAllowed(req.headers))return res.status(404).json({error:'Unavailable'});
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
  const text=(v:unknown,max:number)=>typeof v==='string'?v.trim().slice(0,max+1):'';
  const name=text(req.body?.full_name,120),email=text(req.body?.business_email,254).toLowerCase();
