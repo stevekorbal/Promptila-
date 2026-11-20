@@ -44,7 +44,7 @@ export function classifyProbe(status:number,contentType:string,body:string,trunc
  const heading=(body.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||'').replace(/<[^>]*>/g,' ').trim();
  const challengeTitle=/^(just a moment|attention required|access denied|verify you are human|security check|robot check|checking your browser)/i.test(title);
  const challengeHeading=/^(verify you are human|checking your browser|access denied|security verification|complete the captcha)/i.test(heading);
- const challengeDominates=/verify you are human|checking your browser before accessing|please complete the security check|your request has been blocked/i.test(visible.slice(0,700))&&visible.length<1800;
+ const challengeDominates=/verify you are human|checking your browser|please complete the security check|your request has been blocked/i.test(visible.slice(0,700))&&visible.length<1800;
  if(challengeTitle||challengeHeading||challengeDominates)
   return {status:'challenge',reason:'verified_interstitial_markers',evidence:'Challenge title, primary heading or dominant interstitial text'};
  // HTML byte size alone does not prove useful content: require readable content and site markup.
