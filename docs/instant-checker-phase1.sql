@@ -15,6 +15,7 @@ create table if not exists public.instant_scan_leads (
  scan_id uuid not null references public.instant_scans(id) on delete restrict,
  full_name text not null, business_email text not null, company_name text not null,
  role_title text not null, consent boolean not null check (consent),
+ marketing_consent boolean not null default false,
  created_at timestamptz not null default now()
 );
 create table if not exists public.instant_scan_rate (
@@ -32,6 +33,7 @@ as $$
 declare
  v_start timestamptz := to_timestamp(floor(extract(epoch from now())/3600)*3600);
  v_count integer;
+ v_domain_count integer;
  v_state public.instant_scans%rowtype;
 begin
  if length(p_domain)>253 or p_domain !~ '^[a-z0-9.-]+$' or length(p_ip_hash)<>64 then
@@ -42,6 +44,13 @@ begin
  on conflict(ip_hash,window_start) do update set attempts=public.instant_scan_rate.attempts+1
  returning attempts into v_count;
  if v_count>8 then return 'rate_limited'; end if;
+ -- Domain-wide daily cap is enforced atomically to prevent distributed abuse.
+ insert into public.instant_scan_rate(ip_hash,window_start,attempts)
+ values('domain:'||pg_catalog.md5(p_domain),
+   pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from now())/86400)*86400),1)
+ on conflict(ip_hash,window_start) do update set attempts=public.instant_scan_rate.attempts+1
+ returning attempts into v_domain_count;
+ if v_domain_count>60 then return 'rate_limited'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('instant:'||p_domain));
  select * into v_state from public.instant_scans where domain=p_domain for update;
  if found then
@@ -52,7 +61,7 @@ begin
    return 'busy';
   end if;
   update public.instant_scans set status='running',website_url=p_url,
-   result=null,started_at=now(),lease_expires_at=now()+interval '35 seconds',
+   started_at=now(),lease_expires_at=now()+interval '35 seconds',
    scanned_at=null,expires_at=null,score_version='instant-v1.0'
    where domain=p_domain;
  else
