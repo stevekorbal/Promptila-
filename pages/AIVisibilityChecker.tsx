@@ -81,7 +81,10 @@ export default function AIVisibilityChecker(){
      </div>
      {report.status==='incomplete'&&report.provisional&&<div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
       <p className="text-sm font-bold uppercase tracking-wide text-amber-900">Provisional range — not a final score</p>
-      <p className="mt-1 text-3xl font-extrabold text-amber-950">{report.provisional.minimum}–{report.provisional.maximum}<span className="text-base font-medium"> / 100</span></p>
+      {report.provisional.unknown_points>=60?
+       <p className="mt-2 text-xl font-bold text-amber-950">Not enough evidence for a useful score range</p>:
+       <p className="mt-1 text-3xl font-extrabold text-amber-950">{report.provisional.minimum}–{report.provisional.maximum}<span className="text-base font-medium"> / 100</span></p>}
+      {report.provisional.unknown_points>=60&&<p className="text-sm mt-2 text-amber-900">For transparency, the mathematical bounds are {report.provisional.minimum}–{report.provisional.maximum}/100, but the uncertainty is too large to use as a rating.</p>}
       <p className="mt-2 text-sm text-amber-900">{report.provisional.verified_points} points confirmed earned; {report.provisional.unknown_points} points remain unverified. Unknown checks are neither passed nor failed. No definitive AI-engine scores are assigned.</p>
      </div>}
      {report.js_dependent&&<p className="mt-4 bg-amber-50 text-amber-900 border border-amber-200 p-4 rounded-xl text-sm"><AlertTriangle className="inline mr-2" size={17}/>This site appears to load important content with JavaScript. Some content and structure checks are unverified rather than marked missing.</p>}
