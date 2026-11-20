@@ -15,7 +15,7 @@ export function publicResult(row:any){
  // Explicit allowlist. Never include private lead records, internal IDs or raw HTML.
  return {domain:r.domain,url:r.url,scanned_at:r.scanned_at,version:r.version,status:r.status,
   score:r.score,classification:r.classification,categories:r.categories,engines:r.engines,
-  crawlerAccess:r.crawlerAccess,checks:r.checks,js_dependent:r.js_dependent,
+  crawlerAccess:r.crawlerAccess,checks:Array.isArray(r.checks)?r.checks.map((x:any)=>({id:x.id,category:x.category,label:x.label,points:x.points,status:x.status,evidence:typeof x.evidence==='string'?x.evidence.replace(/(?:ENOTFOUND|ECONNREFUSED|EHOSTUNREACH|ETIMEDOUT|EAI_AGAIN|ERR_[A-Z_]+|stream_error:[^ ]+)/g,'Connection or response could not be verified').slice(0,240):''})):[],js_dependent:r.js_dependent,
   elapsed_ms:r.elapsed_ms,request_count:r.request_count,bytes_fetched:r.bytes_fetched,
   disclaimer:r.disclaimer,llms_note:r.llms_note,
   robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional};
@@ -29,10 +29,10 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const url=validateWebsite(req.method==='GET'?req.query.domain:req.body?.website);
   const domain=url.hostname;const db=database();
   if(req.method==='GET'){
-   const {data,error}=await db.from('instant_scans').select('result,status').eq('domain',domain).maybeSingle();
+   const {data,error}=await db.from('instant_scans').select('result,status,expires_at').eq('domain',domain).maybeSingle();
    if(error)throw error;
    if(!data||!data.result)return res.status(404).json({error:'No report available.'});
-   return res.status(200).json({report:publicResult(data)});
+   return res.status(200).json({report:publicResult(data),stale:!data.expires_at||new Date(data.expires_at).getTime()<=Date.now()});
   }
   const remote=String(req.headers['x-vercel-forwarded-for']||req.socket.remoteAddress||'unknown').slice(0,128);
   const salt=process.env.INSTANT_CHECKER_RATE_SALT;
