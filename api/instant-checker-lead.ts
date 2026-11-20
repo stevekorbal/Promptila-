@@ -13,7 +13,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   return res.status(400).json({error:'Enter all fields and agree to the privacy notice.'});
  try{
   const domain=validateWebsite(req.body?.domain).hostname;
-  const url=(process.env.SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
+  const url=(process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
   const key=process.env.SUPABASE_SERVICE_ROLE_KEY,salt=process.env.INSTANT_CHECKER_RATE_SALT;
   if(!url||!key||!salt||salt.length<24)return res.status(503).json({error:'Unavailable'});
   const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
