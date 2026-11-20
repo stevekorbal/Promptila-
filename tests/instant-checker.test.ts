@@ -216,3 +216,12 @@ test('private tester access must be enabled, correct, and server configured',()=
  assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_ENABLED:'false'}),false);
  assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_TEST_TOKEN:''}),false);
 });
+
+test('public checker launch remains disabled without both release flags',()=>{
+ const privateKey='a-secure-private-flagged-tester-key-longer-than-32';
+ const base={INSTANT_CHECKER_ENABLED:'true',INSTANT_CHECKER_TEST_TOKEN:privateKey} as NodeJS.ProcessEnv;
+ assert.equal(instantAccessAllowed({},base),false);
+ assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_PUBLIC_ENABLED:'false'}),false);
+ assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_PUBLIC_ENABLED:'true'}),true);
+ assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_ENABLED:'false',INSTANT_CHECKER_PUBLIC_ENABLED:'true'}),false);
+});
