@@ -11,6 +11,7 @@ const domains=[
 ];
 const output:any[]=[];
 process.env.INSTANT_RENDER_FALLBACK='true';
+process.env.INSTANT_RENDER_DIAGNOSTICS='true';
 for(const url of domains){
  const started=performance.now(),initialRss=process.memoryUsage().rss;
  const original=process.env.INSTANT_RENDER_FALLBACK;
