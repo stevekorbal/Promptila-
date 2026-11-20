@@ -1,4 +1,5 @@
 import {instantAccessAllowed} from './_lib/instant-access.ts';
+import {badgeSvg,BADGE_STYLES,type BadgeStyle} from './_lib/instant-badge.ts';
 import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
@@ -41,8 +42,22 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const url=validateWebsite(req.method==='GET'?req.query.domain:req.body?.website);
   const domain=url.hostname;const db=database();
   if(req.method==='GET'){
+   const badgeMode=req.query.badge==='1';
    const {data,error}=await db.from('instant_scans').select('result,status,expires_at').eq('domain',domain).maybeSingle();
    if(error)throw error;
+   if(badgeMode){
+    const style=typeof req.query.style==='string'?req.query.style:'dark';
+    if(!BADGE_STYLES.includes(style as BadgeStyle))return res.status(400).end();
+    if(!data||data.status!=='complete'||data.result?.status!=='complete'||
+      !Number.isInteger(data.result?.score)||!data.expires_at||
+      new Date(data.expires_at).getTime()<=Date.now())return res.status(404).end();
+    const origin=process.env.INSTANT_CHECKER_PUBLIC_ORIGIN||'https://www.promptila.com';
+    const svg=badgeSvg(domain,data.result.score,data.result.scanned_at,style as BadgeStyle,origin);
+    res.setHeader('Content-Type','image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('Cache-Control','public,max-age=300');
+    return res.status(200).send(svg);
+   }
    if(!data||!data.result)return res.status(404).json({error:'No report available.'});
    return res.status(200).json({report:publicResult(data),stale:!data.expires_at||new Date(data.expires_at).getTime()<=Date.now()});
   }
