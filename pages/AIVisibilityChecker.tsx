@@ -6,6 +6,16 @@ type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incom
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
 const labels:{[key:string]:string}={pass:'Found',fail:'Needs attention',unverified:'Not verified'};
 const cats=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
+const badgeStyles=['dark','light','shield','seal'] as const;
+type BadgeStyle=typeof badgeStyles[number];
+const whyMatters:Record<string,string>={
+ 'AI crawler access':'Crawler rules can prevent automated services from requesting public pages; permissions do not guarantee AI recommendations.',
+ 'Structured data':'Linked, valid structured data helps machines interpret the identity and nature of a page.',
+ 'Semantic structure':'Clear titles, headings and readable content make a page easier to understand.',
+ 'Content and entity signals':'Consistent business descriptions help distinguish a company from unrelated websites.',
+ 'llms.txt':'This is an optional, voluntary convention; it is not required for AI recommendations.',
+ 'Technical health':'Working HTTPS, canonical signals and indexability support ordinary website discovery.'
+};
 export default function AIVisibilityChecker(){
  const {domain:reportDomain}=useParams<{domain?:string}>();
  const [website,setWebsite]=useState('');
@@ -13,17 +23,26 @@ export default function AIVisibilityChecker(){
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState('');
  const [cached,setCached]=useState(false);
- const [lead,setLead]=useState({full_name:'',business_email:'',company_name:'',role_title:'',consent:false});
+ const [lead,setLead]=useState({full_name:'',business_email:'',company_name:'',role_title:'',consent:false,marketing_consent:false});
  const [leadStatus,setLeadStatus]=useState('');
  const [leadLoading,setLeadLoading]=useState(false);
  const [expanded,setExpanded]=useState<string|null>(null);
  const [copied,setCopied]=useState(false);
+ const [badgeStyle,setBadgeStyle]=useState<BadgeStyle>('dark');
+ const [elapsed,setElapsed]=useState(0);
+ const [stale,setStale]=useState(false);
+ useEffect(()=>{
+  if(!loading){setElapsed(0);return;}
+  const started=Date.now();
+  const handle=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);
+  return()=>clearInterval(handle);
+ },[loading]);
  useEffect(()=>{
   if(!reportDomain)return;
   let live=true;setLoading(true);setError('');setReport(null);
   fetch('/api/instant-checker?domain='+encodeURIComponent(reportDomain))
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Report unavailable');return d;})
-   .then(d=>{if(live)setReport(d.report);})
+   .then(d=>{if(live){setReport(d.report);setStale(Boolean(d.stale));}})
    .catch(e=>{if(live)setError(e.message);})
    .finally(()=>{if(live)setLoading(false);});
   return()=>{live=false;};
@@ -35,7 +54,7 @@ export default function AIVisibilityChecker(){
    const d=await r.json();
    if(r.status===202)throw Error('A scan is already running for this website. Open its report shortly.');
    if(!r.ok)throw Error(d.error||'Unable to scan website');
-   setReport(d.report);setCached(Boolean(d.cached));
+   setReport(d.report);setCached(Boolean(d.cached));setStale(false);
   }catch(e:any){setError(e.message||'Unable to scan website');}finally{setLoading(false);}
  }
  async function submitLead(e:React.FormEvent){
@@ -50,7 +69,8 @@ export default function AIVisibilityChecker(){
  }
  const input='w-full rounded-xl border border-slate-300 px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
  const fullLink=report?window.location.origin+reportUrl(report.domain):'';
- const badge=report&&report.status==='complete'?`<a href="https://www.promptila.com${reportUrl(report.domain)}"><img src="https://www.promptila.com/api/instant-checker-badge?domain=${encodeURIComponent(report.domain)}" alt="Promptila website readiness estimate" /></a>`:'';
+ const badgeSrc=report?window.location.origin+'/api/instant-checker-badge?domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
+ const badge=report&&report.status==='complete'&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
  return <div className="bg-slate-50 min-h-screen pt-32 pb-20">
   <div className="max-w-5xl mx-auto px-4 sm:px-6">
    <div className="text-center mb-10">
@@ -62,9 +82,13 @@ export default function AIVisibilityChecker(){
     <input className={input} type="text" required maxLength={2048} value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://yourbusiness.com" aria-label="Website URL"/>
     <button disabled={loading} className="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">{loading?'Checking website…':'Check my website'}</button>
    </form>}
-   {loading&&<div role="status" className="bg-white rounded-xl border p-6 mb-6 text-indigo-700 flex items-center gap-3"><Search className="animate-pulse"/>Inspecting website access, structure and content. This may take up to 25 seconds or longer on slow sites.</div>}
+   {loading&&<div role="status" className="bg-white rounded-xl border p-6 mb-6 text-indigo-700 flex items-center gap-3"><Search className="animate-pulse"/>Inspecting website HTML, crawler permissions and technical signals. {elapsed} seconds elapsed; no simulated progress percentage.</div>}
    {error&&<div role="alert" className="rounded-xl p-4 bg-amber-50 text-amber-900 border border-amber-200 mb-7">{error}</div>}
    {report&&<div className="space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <Link to="/ai-visibility-checker" onClick={()=>{setReport(null);setWebsite('');setError('');}} className="font-bold text-indigo-700 underline">Check another website</Link>
+      {stale&&<span className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-900">Saved report is older than the seven-day freshness window. It has not been rescanned.</span>}
+    </div>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <div className="flex flex-wrap justify-between gap-4 mb-5">
       <div><p className="text-sm font-semibold text-indigo-600 uppercase">Website readiness report</p><h2 className="font-extrabold text-2xl text-slate-900 break-all">{report.domain}</h2><p className="text-sm text-slate-500 mt-1">Scanned {new Date(report.scanned_at).toLocaleString()} · {Math.round(report.elapsed_ms/1000)} seconds{cached?' · Cached result':''}</p></div>
@@ -100,7 +124,7 @@ export default function AIVisibilityChecker(){
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-5">Six readiness categories</h3>
      <div className="grid sm:grid-cols-2 gap-4">
-      {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4"><div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?.score===null?'Unverified':`${item.score}/${item.max}`}</span></div><p className="text-xs text-slate-500 mt-1">{item?.verified}/{item?.total} checks verified</p><div className="h-2 rounded-full bg-slate-200 mt-3 overflow-hidden"><div className="h-full bg-indigo-600" style={{width:`${item?.score===null?0:100*item.score/item.max}%`}}/></div></div>;})}
+      {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4"><div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?.score===null?'Unverified':`${item.score}/${item.max}`}</span></div><p className="text-xs text-slate-500 mt-1">{item?.verified}/{item?.total} checks verified</p><div className="h-2 rounded-full bg-slate-200 mt-3 overflow-hidden"><div className="h-full bg-indigo-600" style={{width:`${item?.score===null?0:100*item.score/item.max}%`}}/></div><p className="text-xs text-slate-600 mt-3">{whyMatters[cat]}</p>{item?.score===null&&<p className="text-xs text-amber-800 mt-2">One or more checks could not be verified.</p>}</div>;})}
      </div>
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
@@ -118,7 +142,7 @@ export default function AIVisibilityChecker(){
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-2">Website signals checklist</h3>
      <p className="text-sm text-slate-500 mb-4">Found means verified present; needs attention means confirmed missing or failing; not verified means the scanner could not determine the result.</p>
-     {cats.map(cat=><div key={cat} className="mb-5"><h4 className="font-bold text-slate-900 mb-2">{cat}</h4><div className="divide-y border rounded-lg overflow-hidden">{report.checks.filter(c=>c.category===cat).map(c=><div key={c.id}><button type="button" className="flex w-full items-center gap-3 text-left p-3 bg-white hover:bg-slate-50" onClick={()=>setExpanded(expanded===c.id?null:c.id)}><span className={c.status==='pass'?'text-emerald-600':c.status==='fail'?'text-amber-700':'text-slate-500'}>{c.status==='pass'?<CheckCircle2 size={19}/>:c.status==='fail'?<AlertTriangle size={19}/>:<Clock size={19}/>}</span><span className="flex-1 text-sm font-medium text-slate-800">{c.label}</span><span className="text-xs text-slate-600">{labels[c.status]}</span><ChevronDown size={15}/></button>{expanded===c.id&&<p className="text-sm text-slate-600 px-11 pb-4">{c.evidence}</p>}</div>)}</div></div>)}
+     {cats.map(cat=><div key={cat} className="mb-5"><h4 className="font-bold text-slate-900 mb-2">{cat}</h4><div className="divide-y border rounded-lg overflow-hidden">{report.checks.filter(c=>c.category===cat).map(c=><div key={c.id}><button type="button" className="flex w-full items-center gap-3 text-left p-3 bg-white hover:bg-slate-50" onClick={()=>setExpanded(expanded===c.id?null:c.id)}><span className={c.status==='pass'?'text-emerald-600':c.status==='fail'?'text-amber-700':'text-slate-500'}>{c.status==='pass'?<CheckCircle2 size={19}/>:c.status==='fail'?<AlertTriangle size={19}/>:<Clock size={19}/>}</span><span className="flex-1 text-sm font-medium text-slate-800">{c.label}</span><span className="text-xs text-slate-600">{labels[c.status]}</span><ChevronDown size={15}/></button>{expanded===c.id&&<div className="px-11 pb-4 text-sm text-slate-600"><p><strong>Evidence:</strong> {c.evidence}</p><p className="mt-2"><strong>Why it matters:</strong> {whyMatters[cat]}</p></div>}</div>)}</div></div>)}
      <p className="text-xs text-slate-500">{report.llms_note}</p>
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
@@ -128,7 +152,14 @@ export default function AIVisibilityChecker(){
       <Link to={reportUrl(report.domain)} className="text-indigo-700 break-all underline">{fullLink}</Link>
       <button type="button" onClick={async()=>{await navigator.clipboard.writeText(fullLink);setCopied(true)}} className="border rounded-lg py-2 px-3 text-sm flex items-center gap-2"><Copy size={15}/>{copied?'Copied':'Copy link'}</button>
      </div>
-     {report.status==='complete'&&<details className="mt-6 text-sm"><summary className="font-bold cursor-pointer">Optional embeddable badge</summary><p className="text-slate-600 mt-2">Displays the Promptila website-readiness estimate, not verified AI rankings. Badge remains available only while the report is fresh.</p><textarea readOnly rows={3} className="w-full border rounded-lg p-3 mt-2" value={badge}/></details>}
+     {report.status==='complete'&&!stale?<div className="mt-6">
+      <h4 className="font-bold text-slate-900">Optional embeddable badge</h4>
+      <p className="text-slate-600 mt-2 text-sm">Select a design. Each badge links to this public report and shows only the current Promptila website-readiness score—not AI certification.</p>
+      <div className="flex gap-2 flex-wrap mt-4">{badgeStyles.map(style=><button type="button" key={style} onClick={()=>setBadgeStyle(style)} aria-pressed={badgeStyle===style} className={'rounded-lg border px-4 py-2 capitalize text-sm font-semibold '+(badgeStyle===style?'bg-indigo-600 text-white':'bg-white text-slate-700')}>{style}</button>)}</div>
+      <img src={badgeSrc} alt={'Promptila '+badgeStyle+' style readiness badge'} className="mt-4 max-w-full" width={320} height={90}/>
+      <label className="block font-semibold text-sm mt-4 text-slate-800">Copy embed code<textarea readOnly rows={3} className="w-full border rounded-lg p-3 mt-2 font-mono text-xs" value={badge}/></label>
+      <button type="button" className="border rounded-lg px-4 py-2 text-sm font-semibold mt-2" onClick={()=>navigator.clipboard.writeText(badge)}>Copy badge embed code</button>
+     </div>:<p className="text-xs text-amber-800 mt-4">A verified score badge is available only for complete, current reports.</p>}
     </section>
     <section className="bg-indigo-950 text-white rounded-2xl p-6 sm:p-9">
      <h3 className="text-2xl font-extrabold">Request your personalized fix-plan invitation</h3>
@@ -136,6 +167,7 @@ export default function AIVisibilityChecker(){
      <form className="grid sm:grid-cols-2 gap-4" onSubmit={submitLead}>
       {([['full_name','Full name'],['business_email','Business email'],['company_name','Company name'],['role_title','Role or position']] as const).map(([field,label])=><label key={field} className="text-sm font-semibold">{label}<input required maxLength={field==='business_email'?254:120} type={field==='business_email'?'email':'text'} className={input+' mt-2 text-slate-900'} value={lead[field]} onChange={e=>setLead(old=>({...old,[field]:e.target.value}))}/></label>)}
       <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input required type="checkbox" checked={lead.consent} onChange={e=>setLead(old=>({...old,consent:e.target.checked}))} className="mt-1"/><span>I agree to Promptila storing this information to respond to my fix-plan inquiry. See the <Link className="underline" to="/privacy-policy">Privacy Policy</Link>.</span></label>
+      <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input type="checkbox" checked={lead.marketing_consent} onChange={e=>setLead(old=>({...old,marketing_consent:e.target.checked}))} className="mt-1"/><span>Optional: I would also like to receive occasional Promptila marketing and product emails. This is not required to request my fix-plan invitation.</span></label>
       <button disabled={leadLoading} className="sm:col-span-2 bg-white text-indigo-900 font-extrabold rounded-xl px-5 py-3 disabled:opacity-60">{leadLoading?'Submitting…':'Request fix-plan invitation'}</button>
      </form>
      {leadStatus&&<p className="text-sm mt-4" role="status">{leadStatus}</p>}
