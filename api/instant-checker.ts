@@ -2,9 +2,9 @@ import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { createHash } from 'node:crypto';
 export const config={maxDuration:60};
 async function database(){
- const url=(process.env.SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
+ const url=(process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
- if(!url||!key)throw Error('Service not configured');
+ if(!url||!key)throw Error('checker_configuration_missing');
  const {createClient}=await import('@supabase/supabase-js');
  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
@@ -104,7 +104,10 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  }catch(error:any){
   const message=String(error?.message||'');
   if(/valid website|public DNS|unsafe|Invalid hostname|Only public|Only a public|URL too long/i.test(message))return res.status(400).json({error:'Enter a valid public website URL.'});
-  console.error('Instant checker unavailable',message.slice(0,160));
-  return res.status(503).json({error:'Checker temporarily unavailable.'});
+  // Structured public diagnostic codes, without exposing secrets or upstream details.
+  const code=message==='checker_configuration_missing'?'configuration_missing':
+    /invalid api key|jwt|permission denied|relation .* does not exist|Could not find the function|fetch failed|connect|PGRST|ECONN|ENOTFOUND/i.test(message)?'database_unavailable':'server_unavailable';
+  console.error('Instant checker unavailable',code,message.slice(0,160));
+  return res.status(503).json({error:'Checker temporarily unavailable.',code});
  }
 }
