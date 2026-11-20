@@ -8,7 +8,7 @@ export type RenderedPage={html:string;url:string;duration_ms:number;requests:num
 export type SafeRendererFetcher=(url:URL,start:number,redirects?:number,options?:FetchOptions)=>Promise<PageResponse>;
 export const RENDER_MAX_REQUESTS=18;
 export const RENDER_MAX_BYTES=6_000_000;
-export const RENDER_MAX_MS=9_000;
+export const RENDER_MAX_MS=15_000;
 // Per-instance upper bound. Distributed scan claims already serialize per domain.
 let activeRenders=0;
 
@@ -45,12 +45,12 @@ export async function renderJavaScriptPage(
    return puppeteer.launch({
     executablePath:await chromium.executablePath(),
     args:[...chromium.args,'--disable-background-networking','--disable-extensions','--disable-sync','--no-first-run'],
-    headless:true,timeout:3500,protocolTimeout:5500
+    headless:true,timeout:6500,protocolTimeout:7000
    });
   });
   browser=await Promise.race([
    launchBrowser(),
-   new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('browser_launch_deadline')),4000))
+   new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('browser_launch_deadline')),8000))
   ]);
   const page=await browser.newPage();
   await page.setCacheEnabled(false);
@@ -92,15 +92,17 @@ export async function renderJavaScriptPage(
    }catch{await abort();}
   });
   page.on('popup',async (popup:any)=>{try{await popup.close()}catch{}});
-  await page.setDefaultNavigationTimeout(6000);
-  await page.goto(website.href,{waitUntil:'domcontentloaded',timeout:6000});
+  await page.setDefaultNavigationTimeout(6500);
+  await page.goto(website.href,{waitUntil:'domcontentloaded',timeout:6500});
   // React hydration is bounded: no networkidle, which can wait forever.
   await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(0,RENDER_MAX_MS-(performance.now()-begin)))));
   const html=await page.content();
   const finalUrl=new URL(page.url());
   if(!sameRenderHost(finalUrl,website)||html.length>1_000_000||html.length<100||overBudget)return null;
   return {html,url:page.url(),requests,bytes,duration_ms:Math.round(performance.now()-begin),complete:true,source:'browser'};
- }catch{return null;
+ }catch(error){
+  if(process.env.INSTANT_RENDER_DIAGNOSTICS==='true')console.warn('Browser fallback unavailable:',String((error as Error)?.message||error).slice(0,120));
+  return null;
  }finally{
   if(browser)try{await Promise.race([browser.close(),new Promise(r=>setTimeout(r,700))])}catch{}
   activeRenders--;
