@@ -820,7 +820,7 @@ async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch,renderer?:Rende
   rendering:{status:rendering,pages:(rendered?.complete?1:0)+(renderedAbout?.complete?1:0),elapsed_ms:(rendered?.duration_ms||0)+(renderedAbout?.duration_ms||0),requests:(rendered?.requests||0)+(renderedAbout?.requests||0),bytes:(rendered?.bytes||0)+(renderedAbout?.bytes||0)},
   robots_rules:robotsRules,probes,network_errors:errors,network_events:networkEvents,
   summary:{strengths,weaknesses,uncertain,unverified_count:checks.length-verified.length},
-  provisional,version:'instant-v1.0',
+  provisional,version:'instant-v1.1-render',
   disclaimer:'Website-signal readiness estimates only. No AI models were queried. These do not measure actual AI recommendations or rankings.',
   llms_note:'llms.txt is voluntary and is not a requirement or guarantee for AI recommendations.'
  };
