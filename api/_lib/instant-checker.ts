@@ -159,8 +159,16 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   evidence.text.length+' visible-text characters; '+(evidence.truncated?'partial fetch':'bounded HTML'));
 
  const headlineBrand=evidence.title.split(/[|–—]/)[0]?.trim()||'';
- const strongBrand=structured.businessName||evidence.ogName||
-  (identifiableBrand(headlineBrand)?headlineBrand:'');
+ const hostKey=url.hostname.toLowerCase().replace(/^www\\./,'').split('.')[0].replace(/[^a-z0-9]/g,'');
+ const brandKey=(value:string)=>value.toLowerCase().replace(/\\b(company|llc|incorporated|inc|ltd|the)\\b/g,'').replace(/[^a-z0-9]/g,'');
+ const titleConfirmed=identifiableBrand(headlineBrand)&&brandKey(headlineBrand).length>=4&&
+  (hostKey.includes(brandKey(headlineBrand))||
+   (brandKey(headlineBrand).length>=6&&brandKey(headlineBrand).includes(hostKey)));
+ const ogConfirmed=identifiableBrand(evidence.ogName)&&
+  (evidence.title.toLowerCase().includes(evidence.ogName.toLowerCase())||
+   hostKey.includes(brandKey(evidence.ogName)));
+ const strongBrand=structured.businessName||(ogConfirmed?evidence.ogName:'')||
+  (titleConfirmed?headlineBrand:'');
  const serviceText=structured.businessDescription||evidence.services.find(x=>x.length>=40)||'';
  const brandInText=strongBrand&&(
   (description+' '+evidence.text+' '+evidence.appData.join(' ')).toLowerCase().includes(strongBrand.toLowerCase())
