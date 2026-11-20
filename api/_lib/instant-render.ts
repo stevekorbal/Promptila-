@@ -9,6 +9,8 @@ export type SafeRendererFetcher=(url:URL,start:number,redirects?:number,options?
 export const RENDER_MAX_REQUESTS=18;
 export const RENDER_MAX_BYTES=6_000_000;
 export const RENDER_MAX_MS=9_000;
+// Per-instance upper bound. Distributed scan claims already serialize per domain.
+let activeRenders=0;
 
 export function sameRenderHost(candidate:URL,base:URL){
  const normalize=(s:string)=>s.toLowerCase().replace(/^www\./,'');
@@ -30,6 +32,8 @@ export async function renderJavaScriptPage(
  launch?:()=>Promise<any>
 ):Promise<RenderedPage|null>{
  if(process.env.INSTANT_RENDER_FALLBACK!=='true'&&!launch)return null;
+ if(activeRenders>=1)return null;
+ activeRenders++;
  const begin=performance.now();let browser:any;
  let requests=0,bytes=0;let overBudget=false;
  // Avoid downloading browsers at runtime. Chromium ships with the function.
@@ -97,5 +101,8 @@ export async function renderJavaScriptPage(
   if(!sameRenderHost(finalUrl,website)||html.length>1_000_000||html.length<100||overBudget)return null;
   return {html,url:page.url(),requests,bytes,duration_ms:Math.round(performance.now()-begin),complete:true,source:'browser'};
  }catch{return null;
- }finally{if(browser)try{await Promise.race([browser.close(),new Promise(r=>setTimeout(r,700))])}catch{}}
+ }finally{
+  if(browser)try{await Promise.race([browser.close(),new Promise(r=>setTimeout(r,700))])}catch{}
+  activeRenders--;
+ }
 }
