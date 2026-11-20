@@ -1,6 +1,7 @@
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
 import { badgeSvg,BADGE_STYLES } from '../api/instant-checker-badge.ts';
+import submitLead from '../api/instant-checker-lead.ts';
 import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
 import { parseHtml,schemaNodes } from '../api/_lib/instant-evidence.ts';
 import {validateStructuredData,validateCanonical} from '../api/_lib/instant-validation.ts';
@@ -171,4 +172,33 @@ test('private diagnostics never appear in public report projection',()=>{
  const text=JSON.stringify(publicResult(row));
  assert.doesNotMatch(text,/network_errors|network_events|internal_headers|private@example.com|ENOTFOUND/);
  assert.match(text,/provisional/);
+});
+
+test('lead endpoint rejects missing consent and invalid email before any database write',async()=>{
+ const old=process.env.INSTANT_CHECKER_ENABLED;
+ process.env.INSTANT_CHECKER_ENABLED='true';
+ try{
+  async function request(body:any){
+   const response:any={statusCode:200,body:null,headers:{}};
+   response.setHeader=(key:string,value:string)=>{response.headers[key]=value;return response;};
+   response.status=(code:number)=>{response.statusCode=code;return response;};
+   response.json=(body:any)=>{response.body=body;return response;};
+   const req:any={method:'POST',body};
+   await submitLead(req,response);
+   return response;
+  }
+  const fields={full_name:'Jane Doe',business_email:'jane@example.com',company_name:'Example',role_title:'Owner',domain:'example.com'};
+  assert.equal((await request({...fields,consent:false})).statusCode,400);
+  assert.equal((await request({...fields,business_email:'not-an-email',consent:true})).statusCode,400);
+ }finally{
+  if(old===undefined)delete process.env.INSTANT_CHECKER_ENABLED;
+  else process.env.INSTANT_CHECKER_ENABLED=old;
+ }
+});
+test('lead endpoint remains inaccessible while feature flag is disabled',async()=>{
+ const old=process.env.INSTANT_CHECKER_ENABLED;
+ delete process.env.INSTANT_CHECKER_ENABLED;
+ const res:any={code:200,setHeader(){},status(code:number){this.code=code;return this;},json(){return this;}};
+ try{await submitLead({method:'POST',body:{}} as any,res);assert.equal(res.code,404);}
+ finally{if(old!==undefined)process.env.INSTANT_CHECKER_ENABLED=old;}
 });
