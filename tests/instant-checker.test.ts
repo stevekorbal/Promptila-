@@ -1,8 +1,9 @@
-import {instantAccessAllowed} from '../api/_lib/instant-access.ts';
+import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import { publicResult } from '../api/instant-checker.ts';
 import { badgeSvg,BADGE_STYLES } from '../api/_lib/instant-badge.ts';
 import submitLead from '../api/instant-checker-lead.ts';
+import instantHandler from '../api/instant-checker.ts';
 import { robotsPermission,classifyProbe } from '../api/_lib/instant-crawlers.ts';
 import { parseHtml,schemaNodes } from '../api/_lib/instant-evidence.ts';
 import {validateStructuredData,validateCanonical} from '../api/_lib/instant-validation.ts';
@@ -175,53 +176,32 @@ test('private diagnostics never appear in public report projection',()=>{
  assert.match(text,/provisional/);
 });
 
-test('lead endpoint rejects missing consent and invalid email before any database write',async()=>{
- const old=process.env.INSTANT_CHECKER_ENABLED;
- const oldToken=process.env.INSTANT_CHECKER_TEST_TOKEN;
- process.env.INSTANT_CHECKER_ENABLED='true';
- process.env.INSTANT_CHECKER_TEST_TOKEN='test-secret-at-least-32-characters-long-123456';
- try{
-  async function request(body:any){
-   const response:any={statusCode:200,body:null,headers:{}};
-   response.setHeader=(key:string,value:string)=>{response.headers[key]=value;return response;};
-   response.status=(code:number)=>{response.statusCode=code;return response;};
-   response.json=(body:any)=>{response.body=body;return response;};
-   const req:any={method:'POST',body,headers:{'x-instant-test-token':process.env.INSTANT_CHECKER_TEST_TOKEN}};
-   await submitLead(req,response);
-   return response;
-  }
-  const fields={full_name:'Jane Doe',business_email:'jane@example.com',company_name:'Example',role_title:'Owner',domain:'example.com'};
-  assert.equal((await request({...fields,consent:false})).statusCode,400);
-  assert.equal((await request({...fields,business_email:'not-an-email',consent:true})).statusCode,400);
- }finally{
-  if(old===undefined)delete process.env.INSTANT_CHECKER_ENABLED;
-  else process.env.INSTANT_CHECKER_ENABLED=old;
-  if(oldToken===undefined)delete process.env.INSTANT_CHECKER_TEST_TOKEN;else process.env.INSTANT_CHECKER_TEST_TOKEN=oldToken;
+test('public lead validation requires privacy consent and valid email without tester key',async()=>{
+ async function request(body:any){
+  const res:any={statusCode:200,body:null,headers:{}};
+  res.setHeader=(key:string,value:string)=>{res.headers[key]=value;return res;};
+  res.status=(code:number)=>{res.statusCode=code;return res;};
+  res.json=(value:any)=>{res.body=value;return res;};
+  await submitLead({method:'POST',body,headers:{}} as any,res);
+  return res;
  }
+ const fields={full_name:'Jane Doe',business_email:'jane@example.com',company_name:'Example',role_title:'Owner',domain:'example.com'};
+ assert.equal((await request({...fields,consent:false})).statusCode,400);
+ assert.equal((await request({...fields,business_email:'invalid',consent:true})).statusCode,400);
 });
-test('lead endpoint remains inaccessible while feature flag is disabled',async()=>{
- const old=process.env.INSTANT_CHECKER_ENABLED;
- delete process.env.INSTANT_CHECKER_ENABLED;
- const res:any={code:200,setHeader(){},status(code:number){this.code=code;return this;},json(){return this;}};
- try{await submitLead({method:'POST',body:{}} as any,res);assert.equal(res.code,404);}
- finally{if(old!==undefined)process.env.INSTANT_CHECKER_ENABLED=old;}
+test('public checker rejects invalid URL without tester key',async()=>{
+ const res:any={statusCode:200,body:null,headers:{}};
+ res.setHeader=(key:string,value:string)=>{res.headers[key]=value;return res;};
+ res.status=(code:number)=>{res.statusCode=code;return res;};
+ res.json=(value:any)=>{res.body=value;return res;};
+ const req:any={method:'GET',query:{domain:'http://127.0.0.1'},headers:{}};
+ await instantHandler(req,res);
+ assert.equal(res.statusCode,400);
 });
-
-test('private tester access must be enabled, correct, and server configured',()=>{
- const key='a-secure-private-flagged-tester-key-longer-than-32';
- const env={INSTANT_CHECKER_ENABLED:'true',INSTANT_CHECKER_TEST_TOKEN:key} as NodeJS.ProcessEnv;
- assert.equal(instantAccessAllowed({'x-instant-test-token':key},env),true);
- assert.equal(instantAccessAllowed({},env),false);
- assert.equal(instantAccessAllowed({'x-instant-test-token':'invalid'},env),false);
- assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_ENABLED:'false'}),false);
- assert.equal(instantAccessAllowed({'x-instant-test-token':key},{...env,INSTANT_CHECKER_TEST_TOKEN:''}),false);
-});
-
-test('public checker launch remains disabled without both release flags',()=>{
- const privateKey='a-secure-private-flagged-tester-key-longer-than-32';
- const base={INSTANT_CHECKER_ENABLED:'true',INSTANT_CHECKER_TEST_TOKEN:privateKey} as NodeJS.ProcessEnv;
- assert.equal(instantAccessAllowed({},base),false);
- assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_PUBLIC_ENABLED:'false'}),false);
- assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_PUBLIC_ENABLED:'true'}),true);
- assert.equal(instantAccessAllowed({}, {...base,INSTANT_CHECKER_ENABLED:'false',INSTANT_CHECKER_PUBLIC_ENABLED:'true'}),false);
+test('public checker and lead endpoints do not depend on private launch flags',()=>{
+ const fs=(path:string)=>readFileSync(path,'utf8');
+ const api=fs('api/instant-checker.ts'),lead=fs('api/instant-checker-lead.ts'),ui=fs('pages/AIVisibilityChecker.tsx');
+ for(const content of [api,lead,ui]){
+  assert.doesNotMatch(content,/INSTANT_CHECKER_ENABLED|INSTANT_CHECKER_PUBLIC_ENABLED|INSTANT_CHECKER_TEST_TOKEN|VITE_INSTANT_CHECKER_PUBLIC|x-instant-test-token|Private tester access key/);
+ }
 });
