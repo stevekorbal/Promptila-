@@ -1,7 +1,8 @@
+import {performance} from 'node:perf_hooks';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scanWebsite} from '../api/_lib/instant-checker.ts';
-import {sameRenderHost,publicRenderDestination} from '../api/_lib/instant-render.ts';
+import {sameRenderHost,publicRenderDestination,renderJavaScriptPage} from '../api/_lib/instant-render.ts';
 import type {PageResponse} from '../api/_lib/instant-network.ts';
 
 const hostname='examplecandy.com';
@@ -60,4 +61,20 @@ test('browser request allowlist rejects internal/private and unrelated URLs',asy
   async()=>[{address:'10.0.0.5',family:4}] as any),false);
  assert.equal(await publicRenderDestination(new URL('https://examplecandy.com/app.js'),base,
   async()=>[{address:'93.184.216.34',family:4}] as any),true);
+});
+
+test('browser fallback allows only one concurrent render per function instance',async()=>{
+ const base=new URL('https://examplecandy.com');
+ let entered=false;
+ const pending=renderJavaScriptPage(base,fakeFetch,performance.now(),async()=>{
+  entered=true;
+  await new Promise(resolve=>setTimeout(resolve,80));
+  throw Error('simulated launch cancelled');
+ });
+ assert.equal(entered,true);
+ const overlapping=await renderJavaScriptPage(base,fakeFetch,performance.now(),async()=>{
+  throw Error('second browser must never launch');
+ });
+ assert.equal(overlapping,null);
+ await pending;
 });
