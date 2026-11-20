@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {Globe,ShieldCheck,Search,Copy,CheckCircle2,AlertTriangle,Clock,ChevronDown} from 'lucide-react';
 type Check={id:string;category:string;label:string;points:number;status:'pass'|'fail'|'unverified';evidence:string};
-type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number}};
+type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean}};
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
 const labels:{[key:string]:string}={pass:'Found',fail:'Needs attention',unverified:'Not verified'};
 const cats=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
@@ -79,6 +79,11 @@ export default function AIVisibilityChecker(){
        <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':'Some evidence could not be verified. Promptila has not assigned a definitive score to this website.'}</p>
       </div>
      </div>
+     {report.status==='incomplete'&&report.provisional&&<div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+      <p className="text-sm font-bold uppercase tracking-wide text-amber-900">Provisional range — not a final score</p>
+      <p className="mt-1 text-3xl font-extrabold text-amber-950">{report.provisional.minimum}–{report.provisional.maximum}<span className="text-base font-medium"> / 100</span></p>
+      <p className="mt-2 text-sm text-amber-900">{report.provisional.verified_points} points confirmed earned; {report.provisional.unknown_points} points remain unverified. Unknown checks are neither passed nor failed. No definitive AI-engine scores are assigned.</p>
+     </div>}
      {report.js_dependent&&<p className="mt-4 bg-amber-50 text-amber-900 border border-amber-200 p-4 rounded-xl text-sm"><AlertTriangle className="inline mr-2" size={17}/>This site appears to load important content with JavaScript. Some content and structure checks are unverified rather than marked missing.</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
