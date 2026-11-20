@@ -1,8 +1,18 @@
--- Phase 1 private migration. DO NOT apply to the live database before private review.
+-- Phase 1 private migration. DO NOT apply before Steve reviews the corrections.
+-- Only three NEW instant_* tables and two NEW instant_claim_* functions are created.
+-- Retention: hourly/daily hashed rate counters older than 48h are pruned
+-- opportunistically (2% of scan claims, no cron / paid service).
+-- IMPORTANT: saved reports (including outdated reports), scan rows and leads
+-- are NOT deleted by this migration. Consent data is retained. An explicit
+-- separate retention/erasure policy and approval is required before any
+-- scan or lead purging. Expired report cache is revalidated, not destroyed.
+-- A new claim token is generated each time a lease is replaced;
+-- API writes are conditional on BOTH current token and active lease.
 create table if not exists public.instant_scans (
  id uuid primary key default gen_random_uuid(), domain text not null unique, website_url text not null,
  status text not null default 'running' check (status in ('running','complete','incomplete','error')),
- result jsonb, score_version text not null default 'instant-v1.0',
+ result jsonb, claim_token uuid not null default pg_catalog.gen_random_uuid(),
+ score_version text not null default 'instant-v1.0',
  elapsed_ms integer, bytes_fetched integer, request_count integer,
  estimated_cost_usd numeric(10,6),
  started_at timestamptz not null default now(), scanned_at timestamptz, expires_at timestamptz,
@@ -34,6 +44,7 @@ declare
  v_start timestamptz := to_timestamp(floor(extract(epoch from now())/3600)*3600);
  v_count integer;
  v_domain_count integer;
+ v_token uuid;
  v_state public.instant_scans%rowtype;
 begin
  if length(p_domain)>253 or p_domain !~ '^[a-z0-9.-]+$' or length(p_ip_hash)<>64 then
@@ -44,6 +55,12 @@ begin
  on conflict(ip_hash,window_start) do update set attempts=public.instant_scan_rate.attempts+1
  returning attempts into v_count;
  if v_count>8 then return 'rate_limited'; end if;
+ -- Opportunistic rate-record cleanup: 2% of claim attempts; no external scheduler.
+ -- Keep two full days of rate evidence; never touch scans, reports or leads.
+ if pg_catalog.random() < 0.02 then
+  delete from public.instant_scan_rate
+   where window_start < now() - interval '48 hours';
+ end if;
  -- Domain-wide daily cap is enforced atomically to prevent distributed abuse.
  insert into public.instant_scan_rate(ip_hash,window_start,attempts)
  values('domain:'||pg_catalog.md5(p_domain),
@@ -60,14 +77,17 @@ begin
   if v_state.status='running' and v_state.lease_expires_at>now() then
    return 'busy';
   end if;
+  v_token := pg_catalog.gen_random_uuid();
   update public.instant_scans set status='running',website_url=p_url,
-   started_at=now(),lease_expires_at=now()+interval '35 seconds',
-   scanned_at=null,expires_at=null,score_version='instant-v1.0'
+   claim_token=v_token,started_at=now(),lease_expires_at=now()+interval '75 seconds',
+   score_version='instant-v1.0'
    where domain=p_domain;
  else
-  insert into public.instant_scans(domain,website_url) values (p_domain,p_url);
+  v_token := pg_catalog.gen_random_uuid();
+  insert into public.instant_scans(domain,website_url,claim_token,lease_expires_at)
+   values (p_domain,p_url,v_token,now()+interval '75 seconds');
  end if;
- return 'claimed';
+ return 'claimed:' || v_token::text;
 end;
 $$;
 revoke all on function public.instant_claim_scan(text,text,text) from public,anon,authenticated;
