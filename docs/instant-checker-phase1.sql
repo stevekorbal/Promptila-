@@ -64,7 +64,7 @@ begin
  -- Domain-wide daily cap is enforced atomically to prevent distributed abuse.
  insert into public.instant_scan_rate(ip_hash,window_start,attempts)
  values('domain:'||pg_catalog.md5(p_domain),
-   pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from now())/86400)*86400),1)
+   pg_catalog.to_timestamp(pg_catalog.floor(extract(epoch from now())/86400)*86400),1)
  on conflict(ip_hash,window_start) do update set attempts=public.instant_scan_rate.attempts+1
  returning attempts into v_domain_count;
  if v_domain_count>60 then return 'rate_limited'; end if;
@@ -98,7 +98,7 @@ create or replace function public.instant_claim_lead(p_ip_hash text)
 returns boolean language plpgsql security invoker set search_path = ''
 as $$
 declare
- v_start timestamptz := pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from now())/3600)*3600);
+ v_start timestamptz := pg_catalog.to_timestamp(pg_catalog.floor(extract(epoch from now())/3600)*3600);
  v_count integer;
 begin
  if length(p_ip_hash)<>64 then return false; end if;
