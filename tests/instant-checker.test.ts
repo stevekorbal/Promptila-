@@ -141,3 +141,11 @@ test('ordinary pages mentioning bot protection in script are not classified as c
  const body='<html><head><title>Harris HVAC Services</title><meta name="description" content="Professional heating and cooling services for homes"/></head><body><main><h1>Heating and Cooling Services</h1><p>'+('We provide reliable HVAC repair and installation for residential customers. ').repeat(6)+'</p></main><script>const test = "verify you are human";</script></body></html>';
  assert.equal(classifyProbe(200,'text/html',body,false).status,'accessible');
 });
+
+test('Mitch the Plumber: generic plumbing title does not prove a business brand',async()=>{
+ const html='<html><head><title>Reliable Plumbing Services | Mitch the Plumber</title><meta name="description" content="Reliable Plumbing Services offers local drain clearing and plumbing repairs throughout Michigan."/></head><body><main><h1>Local plumbing services</h1><p>'+('Our licensed plumbing professionals provide repair, installation and drainage services. ').repeat(12)+'</p></main></body></html>';
+ const fetcher=async(u:URL)=>({url:u.href,status:u.pathname==='/'?200:404,type:u.pathname==='/'?'text/html':'text/plain',body:u.pathname==='/'?html:'',bytes:html.length,headers:{'x-robots-tag':'','content-type':'text/html'}});
+ const scanned=await scanWebsite('https://www.mitchtheplumber-mi.com/',fetcher);
+ assert.equal(scanned.checks.find(x=>x.id==='D1')?.status,'fail');
+ assert.equal(scanned.checks.find(x=>x.id==='D4')?.status,'fail');
+});
