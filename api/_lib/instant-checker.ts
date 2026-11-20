@@ -2,6 +2,7 @@ import {performance} from 'node:perf_hooks';
 import {safeFetch,validateWebsite,publicIPv4,type PageResponse,type FetchOptions} from './instant-network.ts';
 import {parseHtml,schemaNodes,schemaHasType,type Evidence} from './instant-evidence.ts';
 import {robotsPermission,ROBOTS_AGENTS,PROBE_AGENTS,classifyProbe} from './instant-crawlers.ts';
+import {validateStructuredData,validateCanonical} from './instant-validation.ts';
 
 export {safeFetch,validateWebsite,publicIPv4};
 export type {PageResponse};
@@ -124,20 +125,21 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   htmlAvailable?'pass':(home as PageResponse|null)&&[401,403,404,410].includes((home as PageResponse).status)?'fail':'unverified',
   evidenceReason(home,errors['/'],'Homepage'));
 
- // Structured data: only parsed JSON-LD with substantive properties qualifies.
- const companyNodes=nodes.filter(n=>schemaHasType(n,'Organization')||schemaHasType(n,'LocalBusiness'));
- const schemaValid=nodes.length>0;
- const identity=companyNodes.find(n=>identifiableBrand(n.name||'')&&
-  typeof n.url==='string'&&/^https?:\/\//.test(n.url));
- const pageSchema=nodes.some(n=>['WebSite','WebPage','AboutPage','Service','Product'].some(t=>schemaHasType(n,t)));
- add('B1','Structured data','Valid JSON-LD',5,schemaValid?'pass':contentMissing(false),
-  schemaValid?nodes.length+' parsed typed JSON-LD items':evidence.jsonErrors?'JSON-LD syntax invalid':'No verifiable JSON-LD block');
- add('B2','Structured data','Business or organization schema',5,companyNodes.length?'pass':contentMissing(false),
-  companyNodes.length?'Typed organization/business node found':'Not found in inspected evidence');
- add('B3','Structured data','Business name and URL in schema',5,identity?'pass':contentMissing(false),
-  identity?'Business name and URL found together in schema':'Name/URL pair not verified');
- add('B4','Structured data','WebSite or relevant page schema',5,pageSchema?'pass':contentMissing(false),
-  pageSchema?'Relevant typed page/site node found':'Page/site schema not verified');
+ // Typed, same-site JSON-LD evidence; avoid unrelated name/URL pairs.
+ const structured=validateStructuredData(nodes,url);
+ const companyNodes=nodes.filter(n=>n&&typeof n==='object'&&n['@type']&&n.name);
+ add('B1','Structured data','Valid JSON-LD',5,
+  structured.valid?'pass':contentMissing(false),
+  structured.valid?structured.evidence.typedNodes+' typed schema.org nodes':'No valid typed schema.org node verified');
+ add('B2','Structured data','Business or organization schema',5,
+  structured.business?'pass':contentMissing(false),
+  structured.business?'Business entity linked to audited hostname':'No matching business entity verified');
+ add('B3','Structured data','Business name and URL in schema',5,
+  structured.identity?'pass':contentMissing(false),
+  structured.identity?'Name '+structured.businessName.slice(0,80)+' and URL '+structured.businessUrl.slice(0,110)+' on same typed entity':'Coherent identity/name/URL pair not verified');
+ add('B4','Structured data','WebSite or relevant page schema',5,
+  structured.page?'pass':contentMissing(false),
+  structured.page?'Page/site typed node linked to audited hostname':'Site/page entity relationship not verified');
 
  add('C1','Semantic structure','Descriptive page title',5,
   title.length>=12&&!/^(home|index|untitled)$/i.test(title)?'pass':contentMissing(false),
@@ -154,9 +156,9 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
   evidence.text.length>=300?'pass':contentMissing(false),
   evidence.text.length+' visible-text characters; '+(evidence.truncated?'partial fetch':'bounded HTML'));
 
- const strongBrand=schemaName(companyNodes)||evidence.ogName||
+ const strongBrand=structured.businessName||evidence.ogName||
   (identifiableBrand(evidence.siteName)?evidence.siteName:'');
- const serviceText=schemaDescription(nodes)||evidence.services.find(x=>x.length>=40)||'';
+ const serviceText=structured.businessDescription||evidence.services.find(x=>x.length>=40)||'';
  const brandInText=strongBrand&&(
   (description+' '+evidence.text+' '+evidence.appData.join(' ')).toLowerCase().includes(strongBrand.toLowerCase())
  );
@@ -198,10 +200,10 @@ export async function scanWebsite(raw:unknown,fetcher:Fetcher=safeFetch){
  add('F2','Technical health','Successful homepage response',3,
   home?.status===200?'pass':home&&[404,410].includes(home.status)?'fail':'unverified',
   evidenceReason(home,errors['/'],'Homepage'));
- let validCanonical=false;
- try{validCanonical=!!evidence.canonical&&new URL(evidence.canonical,url).hostname===url.hostname;}catch{}
+ const canonicalCheck=validateCanonical(evidence.canonical,url);
  add('F3','Technical health','Valid canonical URL',2,
-  validCanonical?'pass':contentMissing(false),evidence.canonical||'No canonical verified');
+  canonicalCheck.valid?'pass':contentMissing(false),
+  evidence.canonical?evidence.canonical.slice(0,150)+' ('+canonicalCheck.reason+')':'No canonical verified');
  const headerNoindex=/\bnoindex\b/i.test(home?.headers['x-robots-tag']||'');
  add('F4','Technical health','Homepage indexability signals',2,
   headerNoindex||evidence.noindex?'fail':htmlFinal?'pass':'unverified',
