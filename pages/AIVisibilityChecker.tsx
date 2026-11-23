@@ -121,7 +121,7 @@ export default function AIVisibilityChecker(){
       </div>
       <div className="flex-1 min-w-48">
        <h3 className="text-2xl font-bold text-slate-900">{report.classification||(report.estimated_readiness?.overall.value!==null&&report.estimated_readiness?.overall.value!==undefined?'Estimated website readiness':'Provisional range')}</h3>
-       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':(report.provisional?`${report.provisional.verified_points} points confirmed; ${report.provisional.unknown_points} points still unverified. This is an estimate, not a verified score.`:'Some evidence could not be verified; no final score is assigned.')}</p>
+       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':(report.provisional?`${report.provisional.verified_points} confirmed points; ${report.provisional.unknown_points} unverified. Possible overall range: ${report.provisional.minimum}–${report.provisional.maximum}/100. An estimated score is not verified.`:'Some evidence could not be verified; no final score is assigned.')}</p>
       </div>
      </div>
      <details className="mt-4 text-sm text-slate-600"><summary className="cursor-pointer font-semibold text-indigo-700">How we checked JavaScript-loaded content</summary>
