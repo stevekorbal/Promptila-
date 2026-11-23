@@ -34,6 +34,9 @@ jobs:
       - run: npx tsx tests/instant-checker-live.ts
       - name: Five-site before/after rendered website scan, measured
         run: npx tsx tests/instant-checker-render-live.ts
+      - name: Read-only production endpoint smoke (main only)
+        if: github.ref == 'refs/heads/main'
+        run: node tests/instant-production-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
