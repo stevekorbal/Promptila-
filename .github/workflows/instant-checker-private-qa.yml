@@ -27,6 +27,8 @@ jobs:
       - name: Real headless Chromium isolated hydration and SSRF smoke
         run: npx tsx --test tests/instant-render-browser.test.ts
       - run: npm run build
+      - name: Verify desktop and mobile checker report in headless Chromium
+        run: npx tsx tests/instant-checker-ui-smoke.ts
       - name: Browser package footprint
         run: du -sh node_modules/@sparticuz/chromium node_modules/puppeteer-core || true
       - run: npx tsx tests/instant-checker-live.ts
@@ -39,4 +41,5 @@ jobs:
           path: |
             instant-checker-private-results.json
             instant-render-live-results.json
+            qa-screenshots/instant-checker-*.png
           if-no-files-found: warn
