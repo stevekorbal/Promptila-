@@ -285,3 +285,11 @@ test('Vercel instant-checker handler keeps estimated-readiness policy bundled',(
  assert.doesNotMatch(handlerSource,/^import\s+(?!type\b).*from\s+['"]\.\/_(?:lib|other)\//m);
  assert.match(handlerSource,/estimated_readiness:estimateReadiness\(r\.checks\)/);
 });
+
+test('lead Vercel handler is self-contained and validates public domains',()=>{
+ const source=readFileSync('api/instant-checker-lead.ts','utf8');
+ assert.doesNotMatch(source,/from ['"]\.\/_lib\/instant-checker\.ts['"]/);
+ assert.match(source,/function validateLeadWebsite/);
+ assert.match(source,/isIP\(host\)/);
+ assert.match(source,/req\.body\?\.consent!==true/);
+});
