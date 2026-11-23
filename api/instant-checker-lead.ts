@@ -1,7 +1,20 @@
 import type {VercelRequest,VercelResponse} from '@vercel/node';
 import {createClient} from '@supabase/supabase-js';
 import {createHash} from 'node:crypto';
-import {validateWebsite} from './_lib/instant-checker.ts';
+import {isIP} from 'node:net';
+// Match the existing public-website input restrictions without a runtime
+// import from scanner internals. A lead request performs no website fetch.
+function validateLeadWebsite(value:unknown):URL{
+ if(typeof value!=='string'||value.length>2048||/[\\s\\x00-\\x1f]/.test(value))throw Error('Invalid public website URL');
+ const candidate=/^https?:\\/\\//i.test(value)?value:'https://'+value;
+ const url=new URL(candidate);
+ if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.port||url.search||url.hash)throw Error('Only a public website URL is accepted');
+ const host=url.hostname.toLowerCase().replace(/\\.$/,'');
+ if(!host.includes('.')||isIP(host)||host.endsWith('.local')||host.endsWith('.internal')||host.length>253||!/^[a-z0-9.-]+$/.test(host))throw Error('Public DNS name required');
+ if(host.split('.').some(x=>!x||x.length>63||x.startsWith('-')||x.endsWith('-')))throw Error('Invalid DNS name');
+ url.hostname=host;url.pathname='/';url.search='';url.hash='';
+ return url;
+}
 export default async function handler(req:VercelRequest,res:VercelResponse){
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
@@ -12,7 +25,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||req.body?.consent!==true)
   return res.status(400).json({error:'Enter all fields and agree to the privacy notice.'});
  try{
-  const domain=validateWebsite(req.body?.domain).hostname;
+  const domain=validateLeadWebsite(req.body?.domain).hostname;
   const url=(process.env.SUPABASE_URL||process.env.VITE_SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'');
   const key=process.env.SUPABASE_SERVICE_ROLE_KEY,salt=process.env.INSTANT_CHECKER_RATE_SALT;
   if(!url||!key||!salt||salt.length<24)return res.status(503).json({error:'Unavailable'});
