@@ -107,7 +107,6 @@ export default function AIVisibilityChecker(){
    {error&&<div role="alert" className="rounded-xl p-4 bg-amber-50 text-amber-900 border border-amber-200 mb-7">{error}</div>}
    {report&&<div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Link to="/ai-visibility-checker" onClick={()=>{setReport(null);setWebsite('');setError('');}} className="font-bold text-indigo-700 underline">Check another website</Link>
       {stale&&<span className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-900">Saved report is older than the seven-day freshness window. It has not been rescanned.</span>}
     </div>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
