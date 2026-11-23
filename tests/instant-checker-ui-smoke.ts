@@ -4,6 +4,7 @@ import {mkdirSync} from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import {buildFixPlan} from '../api/_lib/instant-fix-plan.ts';
+import {estimateReadiness} from '../api/_lib/instant-estimates.ts';
 
 const groups:[string,[string,number][]][]=[
  ['AI crawler access',[['A1',5],['A2',5],['A3',5],['A4',5],['A5',5]]],
@@ -20,11 +21,13 @@ const categories=Object.fromEntries(groups.map(([name,items])=>{
  return [name,{score:verified.length===own.length?own.filter(x=>x.status==='pass').reduce((n,x)=>n+x.points,0):null,max:items.reduce((n,x)=>n+x[1],0),verified:verified.length,total:own.length}];
 }));
 const plan=buildFixPlan(checks);
+const estimated_readiness=estimateReadiness(checks);
+assert.equal(estimated_readiness?.overall.value,63);
 assert.deepEqual(plan.map(x=>x.impact),[20,10,3,2]);
 assert.ok(!plan.some(x=>x.id.includes('D3')));
 const report={
  domain:'www.biglakecandy.com',url:'https://www.biglakecandy.com/',scanned_at:'2026-11-23T14:50:35.591Z',status:'incomplete',
- score:null,classification:null,categories,checks,engines:{ChatGPT:null,Gemini:null,Claude:null,Perplexity:null},
+ score:null,classification:null,categories,checks,estimated_readiness,engines:{ChatGPT:null,Gemini:null,Claude:null,Perplexity:null},
  crawlerAccess:{ChatGPT:'Allowed',Gemini:'Allowed',Claude:'Allowed',Perplexity:'Allowed'},
  js_dependent:true,elapsed_ms:6086,rendering:{status:'complete',pages:2,elapsed_ms:5735,requests:3,bytes:297314},
  summary:{strengths:['Homepage fetchable'],weaknesses:['Valid JSON-LD','Heading hierarchy'],uncertain:['About or company information'],unverified_count:1},
@@ -64,8 +67,10 @@ try{
    assert.ok(state.text.includes('61–65'),'Provisional range missing');
    assert.ok(state.text.includes('11/15'),'Confirmed content-and-entity points missing');
    assert.ok(state.text.includes('4 points unverified'),'Unverified points not labeled');
-   assert.equal((state.text.match(/Pending/g)||[]).length,4,'Expected four pending engine estimates');
-   assert.equal((state.text.match(/This range is not a final score/g)||[]).length,1,'Duplicate top-level provisional warning');
+   for(const number of ['68','67','72'])assert.ok(state.text.includes(number),'Missing numerical engine estimate '+number);
+   assert.ok(state.text.includes('Score badge'),'Badge section missing');
+   assert.ok(state.text.includes('Optional embeddable badge'),'Eligible estimated badge missing');
+   assert.equal((state.text.match(/An estimated score is not verified/g)||[]).length,1,'Duplicate top-level estimate disclaimer');
    assert.ok(state.text.includes('not required for AI recommendations'),'Optional llms.txt disclaimer missing');
    assert.ok(!state.priorityText.includes('About or company information'),'Unverified About wrongly recommended');
    let at=-1;for(const label of ['Make business information machine-readable','Consider publishing an llms.txt overview','Correct the heading hierarchy','Fix the homepage canonical URL']){const pos=state.priorityText.indexOf(label);assert.ok(pos>at, 'Wrong recommendation order: '+label);at=pos;}
