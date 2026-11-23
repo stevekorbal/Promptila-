@@ -17,10 +17,12 @@ for(const [label,url,ua] of paths){
     let body='',length=0;
     res.on('data',chunk=>{length+=chunk.length;if(body.length<14000)body+=chunk.toString('utf8').slice(0,14000-body.length)});
     res.on('end',()=>{const h=res.headers;
-     const markers=['captcha','cloudflare','access denied','forbidden','bot protection','security','sucuri','mod_security','blocked'].filter(x=>body.toLowerCase().includes(x));
+     const markers=['captcha','cloudflare','access denied','forbidden','bot protection','security','sucuri','mod_security','blocked','vercel security checkpoint','waf','human verification','challenge','rate limit'].filter(x=>body.toLowerCase().includes(x));
+     const rawTitle=body.match(/<title[^>]*>([^<]{0,180})<\/title>/i)?.[1]||'';
+     const title=rawTitle.replace(/[^a-z0-9 :,.-]/gi,'').slice(0,110);
      resolve({status:res.statusCode,location:h.location||null,contentType:h['content-type']||null,server:h.server||null,
       cfRay:h['cf-ray']?true:false,sucuri:h['x-sucuri-id']?true:false,via:h.via?true:false,
-      vary:h.vary||null,cache:h['cache-control']||null,bodyBytes:length,markers});
+      vary:h.vary||null,cache:h['cache-control']||null,bodyBytes:length,title,vercelMitigated:h['x-vercel-mitigated']||null,vercelId:!!h['x-vercel-id'],robotsTag:h['x-robots-tag']||null,markers});
     });
    });req.on('timeout',()=>req.destroy(Error('timeout')));req.on('error',reject);
   });
