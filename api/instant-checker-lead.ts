@@ -5,11 +5,11 @@ import {isIP} from 'node:net';
 // Match the existing public-website input restrictions without a runtime
 // import from scanner internals. A lead request performs no website fetch.
 function validateLeadWebsite(value:unknown):URL{
- if(typeof value!=='string'||value.length>2048||/[\\s\\x00-\\x1f]/.test(value))throw Error('Invalid public website URL');
- const candidate=/^https?:\\/\\//i.test(value)?value:'https://'+value;
+ if(typeof value!=='string'||value.length>2048||/[\s\x00-\x1f]/.test(value))throw Error('Invalid public website URL');
+ const candidate=/^https?:\/\//i.test(value)?value:'https://'+value;
  const url=new URL(candidate);
  if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.port||url.search||url.hash)throw Error('Only a public website URL is accepted');
- const host=url.hostname.toLowerCase().replace(/\\.$/,'');
+ const host=url.hostname.toLowerCase().replace(/\.$/,'');
  if(!host.includes('.')||isIP(host)||host.endsWith('.local')||host.endsWith('.internal')||host.length>253||!/^[a-z0-9.-]+$/.test(host))throw Error('Public DNS name required');
  if(host.split('.').some(x=>!x||x.length>63||x.startsWith('-')||x.endsWith('-')))throw Error('Invalid DNS name');
  url.hostname=host;url.pathname='/';url.search='';url.hash='';
