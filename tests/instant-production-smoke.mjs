@@ -1,10 +1,11 @@
-// Production-only read-only smoke: validates live Vercel function startup and saved report/badge.
-// No new scans, lead submissions, or payments.
+// Production smoke: validates Vercel startup, saved report/badge and a cached scan POST.
+// Existing cached URL only: no new external scan, lead submission or payment.
 const base='https://www.promptila.com';
 const paths=[
  {path:'/api/instant-checker?health=1',type:'json',verify:d=>d?.status==='ok'},
  {path:'/api/instant-checker?domain=www.biglakecandy.com',type:'json',verify:d=>d?.report?.domain==='www.biglakecandy.com'&&d?.report?.estimated_readiness?.overall?.value===63},
- {path:'/api/instant-checker?badge=1&domain=www.biglakecandy.com&style=dark',type:'svg',verify:d=>d.includes('Estimated')&&d.includes('Not verified')}
+ {path:'/api/instant-checker?badge=1&domain=www.biglakecandy.com&style=dark',type:'svg',verify:d=>d.includes('Estimated')&&d.includes('Not verified')},
+ {path:'/api/instant-checker',type:'json',method:'POST',body:JSON.stringify({website:'https://www.biglakecandy.com'}),verify:d=>d?.cached===true&&d?.report?.domain==='www.biglakecandy.com'&&d?.report?.estimated_readiness?.overall?.value===63}
 ];
 for(const test of paths){
  let ok=false,last='';
@@ -13,7 +14,7 @@ for(const test of paths){
    const controller=new AbortController();
    const timeout=setTimeout(()=>controller.abort(),6500);
    let response;
-   try{response=await fetch(base+test.path,{signal:controller.signal,headers:{'cache-control':'no-cache'}});}finally{clearTimeout(timeout);}
+   try{response=await fetch(base+test.path,{signal:controller.signal,method:test.method||'GET',body:test.body,headers:{'cache-control':'no-cache',...(test.method?{'content-type':'application/json'}:{})}});}finally{clearTimeout(timeout);}
    const raw=await response.text();
    const parsed=test.type==='json'&&response.headers.get('content-type')?.includes('json')?JSON.parse(raw):raw;
    if(response.status===200&&test.verify(parsed)){ok=true;console.log('PRODUCTION_SMOKE passed',test.path,'attempt',attempt+1);break;}
