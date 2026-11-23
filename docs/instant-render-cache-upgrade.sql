@@ -1,9 +1,13 @@
 -- STAGED / NOT APPLIED: use only after browser-run validation and approved zero-cost deployment.
--- Replaces ONLY the existing isolated public.instant_claim_scan function.
+-- Updates ONLY the isolated public.instant_scans table and public.instant_claim_scan function.
+-- Preserves previous completed/incomplete results inside result_history before a refresh.
+-- Does not change lead records, paid reports, Stripe, or n8n.
 -- Existing 7-day cache remains for instant-v1.1-render; previous unfinished
 -- JS-shell results can be rescanned once, without deleting any report or lead.
 -- Requires the Instant Checker v1.1 application release and browser fallback.
 begin;
+alter table public.instant_scans
+ add column if not exists result_history jsonb not null default '[]'::jsonb;
 create or replace function public.instant_claim_scan(p_domain text,p_url text,p_ip_hash text)
 returns text language plpgsql security invoker set search_path = ''
 as $$
@@ -45,7 +49,14 @@ begin
    return 'busy';
   end if;
   v_token := pg_catalog.gen_random_uuid();
-  update public.instant_scans set status='running',website_url=p_url,
+  update public.instant_scans set
+   result_history = case
+     when status in ('complete','incomplete') and result is not null
+     then result_history || pg_catalog.jsonb_build_array(
+       pg_catalog.jsonb_build_object('result',result,'score_version',score_version,
+         'scanned_at',scanned_at,'archived_at',now()))
+     else result_history end,
+   status='running',website_url=p_url,
    claim_token=v_token,started_at=now(),lease_expires_at=now()+interval '75 seconds',
    score_version='instant-v1.1-render'
    where domain=p_domain;
