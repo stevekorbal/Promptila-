@@ -1,13 +1,17 @@
 import {performance} from 'node:perf_hooks';
 import {writeFileSync} from 'node:fs';
 import {scanWebsite} from '../api/_lib/instant-checker.ts';
+import {estimateReadiness} from '../api/_lib/instant-estimates.ts';
 
 const domains=[
  'https://biglakecandy.com',
  'https://promptila.com',
  'https://www.apple.com',
  'https://www.hubspot.com',
- 'https://wordpress.com'
+ 'https://wordpress.com',
+ 'https://cud.ac.ae',
+ 'https://cs16forge.com',
+ 'https://teviroai.com'
 ];
 const output:any[]=[];
 process.env.INSTANT_RENDER_FALLBACK='true';
@@ -22,8 +26,10 @@ for(const url of domains){
  const startedRender=performance.now();
  let after:any;
  try{after=await scanWebsite(url);}catch(e:any){after={status:'error',error:String(e?.message||e)};}
+ const estimate=Array.isArray(after.checks)?estimateReadiness(after.checks):null;
  const result={
   url,
+  estimated_presentation:estimate,
   before:{status:before.status,score:before.score??null,provisional:before.provisional??null,elapsed_ms:before.elapsed_ms??null},
   after:{status:after.status,score:after.score??null,provisional:after.provisional??null,elapsed_ms:after.elapsed_ms??null,rendering:after.rendering??null},
   total_wall_ms:Math.round(performance.now()-started),
