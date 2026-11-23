@@ -115,11 +115,11 @@ export default function AIVisibilityChecker(){
      </div>
      <div className="flex flex-wrap gap-5 items-center bg-slate-50 rounded-xl p-5">
       <div className="border-4 border-indigo-500 w-32 h-32 rounded-full flex flex-col justify-center items-center shrink-0">
-       <strong className="text-4xl text-slate-900">{report.score??'—'}</strong><span className="text-slate-500 text-sm">out of 100</span>
+       <strong className={(report.score===null&&report.provisional&&report.provisional.unknown_points<60?"text-2xl":"text-4xl")+" text-slate-900"}>{report.score??(report.provisional&&report.provisional.unknown_points<60?`${report.provisional.minimum}–${report.provisional.maximum}`:"—")}</strong><span className="text-slate-500 text-xs">{report.score!==null?"out of 100":report.provisional&&report.provisional.unknown_points<60?"provisional / 100":"no final score"}</span>
       </div>
       <div className="flex-1 min-w-48">
        <h3 className="text-2xl font-bold text-slate-900">{report.classification||'Not enough verified information'}</h3>
-       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':'Some evidence could not be verified. Promptila has not assigned a definitive score to this website.'}</p>
+       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':'Some evidence could not be verified. Any displayed range is provisional, not a definitive score.'}</p>
       </div>
      </div>
      {report.status==='incomplete'&&report.provisional&&<div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
