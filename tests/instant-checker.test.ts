@@ -293,3 +293,13 @@ test('lead Vercel handler is self-contained and validates public domains',()=>{
  assert.match(source,/isIP\(host\)/);
  assert.match(source,/req\.body\?\.consent!==true/);
 });
+
+test('existing Stripe checkout metadata and prices remain unchanged after entrypoint packaging fix',()=>{
+ const checkout=readFileSync('api/create-checkout-session.ts','utf8');
+ assert.doesNotMatch(checkout,/from ['"]\.\/create-payment-intent\.ts['"]/);
+ assert.match(checkout,/function extractStripeMetadata/);
+ assert.match(checkout,/unit_amount: 29900/);
+ assert.match(checkout,/unit_amount: 99900/);
+ assert.match(checkout,/unit_amount: 9900/);
+ assert.match(checkout,/req\.method !== 'POST'/);
+});
