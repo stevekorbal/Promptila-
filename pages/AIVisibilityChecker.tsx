@@ -113,7 +113,7 @@ export default function AIVisibilityChecker(){
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <div className="flex flex-wrap justify-between gap-4 mb-5">
       <div><p className="text-sm font-semibold text-indigo-600 uppercase">Website readiness report</p><h2 className="font-extrabold text-2xl text-slate-900 break-all">{report.domain}</h2><p className="text-sm text-slate-500 mt-1">Scanned {new Date(report.scanned_at).toLocaleString()} · {Math.round(report.elapsed_ms/1000)} seconds{cached?' · Cached result':''}</p></div>
-      <span className={'self-start rounded-full px-4 py-2 text-sm font-bold '+(report.status==='complete'?'text-emerald-700 bg-emerald-50':'text-amber-800 bg-amber-50')}>{report.status==='complete'?'Completed scan':'Incomplete scan'}</span>
+      <span className={'self-start rounded-full px-4 py-2 text-sm font-bold '+(report.status==='complete'?'text-emerald-700 bg-emerald-50':'text-amber-800 bg-amber-50')}>{report.status==='complete'?'Completed scan':report.estimated_readiness?.overall.value!==null&&report.estimated_readiness?.overall.value!==undefined?'Estimated result':'Incomplete scan'}</span>
      </div>
      <div className="flex flex-wrap gap-5 items-center bg-slate-50 rounded-xl p-5">
       <div className="border-4 border-indigo-500 w-32 h-32 rounded-full flex flex-col justify-center items-center shrink-0">
