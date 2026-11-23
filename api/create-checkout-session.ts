@@ -1,6 +1,65 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
-import { extractStripeMetadata } from './create-payment-intent.ts';
+// Preserve the existing payment metadata rules without a Vercel runtime import.
+function cleanMetaString(val: any, maxLength = 200): string {
+  if (val === null || val === undefined) return '';
+  return String(val).trim().slice(0, maxLength);
+}
+
+function normalizeService(service: any): 'diy' | 'dfy' | 'monitoring' {
+  const s = String(service || '').toLowerCase().trim();
+  if (s === 'dfy' || s === 'optimization') return 'dfy';
+  if (s === 'monitoring' || s === 'monthly') return 'monitoring';
+  return 'diy';
+}
+
+function sanitizeAuditId(auditId: any): string {
+  if (!auditId) return '';
+  const cleaned = String(auditId).trim().toUpperCase();
+  return /^AUD-\d{4,}$/.test(cleaned) ? cleaned.slice(0, 200) : '';
+}
+
+function extractStripeMetadata(body: any): {
+  service: 'diy' | 'dfy' | 'monitoring';
+  audit_id: string;
+  customer_email: string;
+  customer_name: string;
+  customer_phone: string;
+  business_name: string;
+  website: string;
+} {
+  const emailRaw = body?.customer_email ?? body?.email ?? '';
+  const email = String(emailRaw).trim().toLowerCase().slice(0, 200);
+
+  const nameRaw =
+    body?.customer_name ??
+    `${body?.firstName || ''} ${body?.lastName || ''}`.trim();
+  const name = cleanMetaString(nameRaw, 200);
+  const customer_phone = cleanMetaString(body?.customer_phone ?? body?.phone ?? '', 50);
+
+  const businessRaw = body?.business_name ?? body?.businessName ?? '';
+  const business = cleanMetaString(businessRaw, 200);
+
+  const websiteRaw = body?.website ?? '';
+  const website = cleanMetaString(websiteRaw, 200);
+
+  const auditIdRaw = body?.audit_id ?? body?.auditId ?? '';
+  const audit_id = sanitizeAuditId(auditIdRaw);
+
+  const service = normalizeService(body?.service);
+
+  return {
+    service,
+    audit_id,
+    customer_email: email,
+    customer_name: name,
+    customer_phone,
+    business_name: business,
+    website,
+  };
+}
+
+
 
 function getStripeInstance(): Stripe {
   const secretKey = process.env.STRIPE_SECRET_KEY || '';
