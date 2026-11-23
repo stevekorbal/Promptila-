@@ -215,3 +215,19 @@ test('Vercel function health check responds before loading scanner or Supabase',
  assert.equal(res.statusCode,200);
  assert.deepEqual(res.body,{status:'ok'});
 });
+
+import {buildFixPlan} from '../api/_lib/instant-fix-plan.ts';
+test('rule-based free fix plan prioritizes only confirmed Big Lake Candy failures',()=>{
+ const failures=['B1','B2','B3','B4','E1','E2','E3','C4','F3'];
+ const checks=make('pass').map(c=>({...c,status:(failures.includes(c.id)?'fail':c.id==='D3'?'unverified':'pass') as Check['status']}));
+ const plan=buildFixPlan(checks);
+ assert.equal(plan.length,4);
+ assert.deepEqual(plan.map(x=>x.impact),[20,10,3,2]);
+ assert.deepEqual(plan.map(x=>x.priority),['High','Medium','Low','Low']);
+ assert.ok(plan.every(x=>!x.id.includes('D3')));
+ assert.ok(plan.some(x=>x.title.includes('canonical')));
+});
+test('rule-based fix plan never recommends unverified checks',()=>{
+ const checks=make('unverified');
+ assert.deepEqual(buildFixPlan(checks),[]);
+});
