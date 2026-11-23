@@ -3,7 +3,8 @@ import {Link,useParams} from 'react-router-dom';
 import {Globe,ShieldCheck,Search,Copy,CheckCircle2,AlertTriangle,Clock,ChevronDown} from 'lucide-react';
 import {buildFixPlan} from '../api/_lib/instant-fix-plan';
 type Check={id:string;category:string;label:string;points:number;status:'pass'|'fail'|'unverified';evidence:string};
-type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;rendering?:{status:'complete'|'failed'|'disabled'|'not_needed';pages:number;elapsed_ms:number;requests:number;bytes:number};disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];uncertain?:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean}};
+type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;rendering?:{status:'complete'|'failed'|'disabled'|'not_needed';pages:number;elapsed_ms:number;requests:number;bytes:number};disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];uncertain?:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean};estimated_readiness?:EstimatedReadiness|null};
+type EstimatedReadiness={status:'verified'|'estimated'|'range_only';overall:{value:number|null;minimum:number;maximum:number;unknown_points:number;estimated:boolean};engines:Record<string,{value:number|null;minimum:number;maximum:number;estimated:boolean}>;badge_eligible:boolean};
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
 async function readApiResponse(response:Response):Promise<any>{
  const contentType=response.headers.get('content-type')||'';
@@ -82,16 +83,16 @@ export default function AIVisibilityChecker(){
  const input='w-full rounded-xl border border-slate-300 px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
  const fullLink=report?window.location.origin+reportUrl(report.domain):'';
  const badgeSrc=report?window.location.origin+'/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
- const badge=report&&report.status==='complete'&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
+ const badge=report&&(report.status==='complete'||report.estimated_readiness?.badge_eligible)&&!stale?`<a href="${fullLink}" target="_blank" rel="noopener noreferrer"><img src="${badgeSrc}" alt="Promptila website-readiness estimate — ${badgeStyle} style" /></a>`:'';
  useEffect(()=>{
-  if(!report||report.status!=='complete'||stale){setBadgePreview('');return;}
+  if(!report||!(report.status==='complete'||report.estimated_readiness?.badge_eligible)||stale){setBadgePreview('');return;}
   let live=true;let objectUrl='';
   fetch('/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle)
    .then(async response=>{if(!response.ok)throw Error('Unavailable badge');return response.blob();})
    .then(blob=>{if(!live)return;objectUrl=URL.createObjectURL(blob);setBadgePreview(objectUrl);})
    .catch(()=>{if(live)setBadgePreview('');});
   return()=>{live=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
- },[report?.domain,report?.status,badgeStyle,stale]);
+ },[report?.domain,report?.status,report?.estimated_readiness?.badge_eligible,badgeStyle,stale]);
  return <div className="bg-slate-50 min-h-screen pt-32 pb-20">
   <div className="max-w-5xl mx-auto px-4 sm:px-6">
    <div className="text-center mb-10">
@@ -116,11 +117,11 @@ export default function AIVisibilityChecker(){
      </div>
      <div className="flex flex-wrap gap-5 items-center bg-slate-50 rounded-xl p-5">
       <div className="border-4 border-indigo-500 w-32 h-32 rounded-full flex flex-col justify-center items-center shrink-0">
-       <strong className={(report.score===null&&report.provisional&&report.provisional.unknown_points<60?"text-2xl":"text-4xl")+" text-slate-900"}>{report.score??(report.provisional&&report.provisional.unknown_points<60?`${report.provisional.minimum}–${report.provisional.maximum}`:"—")}</strong><span className="text-slate-500 text-xs">{report.score!==null?"out of 100":report.provisional&&report.provisional.unknown_points<60?"provisional / 100":"no final score"}</span>
+       <strong className="text-3xl text-slate-900">{report.score??report.estimated_readiness?.overall.value??(report.provisional?`${report.provisional.minimum}–${report.provisional.maximum}`:"—")}</strong><span className="text-slate-500 text-xs">{report.score!==null?"verified / 100":report.estimated_readiness?.overall.value!==null&&report.estimated_readiness?.overall.value!==undefined?"estimated / 100":"estimated range / 100"}</span>
       </div>
       <div className="flex-1 min-w-48">
-       <h3 className="text-2xl font-bold text-slate-900">{report.classification||(report.provisional?.unknown_points!==undefined?'Provisional range':'Assessment incomplete')}</h3>
-       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':(report.provisional?`${report.provisional.verified_points} points confirmed; ${report.provisional.unknown_points} points still unverified. This range is not a final score.`:'Some evidence could not be verified; no final score is assigned.')}</p>
+       <h3 className="text-2xl font-bold text-slate-900">{report.classification||(report.estimated_readiness?.overall.value!==null&&report.estimated_readiness?.overall.value!==undefined?'Estimated website readiness':'Provisional range')}</h3>
+       <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':(report.provisional?`${report.provisional.verified_points} points confirmed; ${report.provisional.unknown_points} points still unverified. This is an estimate, not a verified score.`:'Some evidence could not be verified; no final score is assigned.')}</p>
       </div>
      </div>
      <details className="mt-4 text-sm text-slate-600"><summary className="cursor-pointer font-semibold text-indigo-700">How we checked JavaScript-loaded content</summary>
@@ -131,9 +132,9 @@ export default function AIVisibilityChecker(){
      <h3 className="text-xl font-extrabold text-slate-900">Estimated AI-platform readiness</h3>
      {report.status==='complete'&&<p className="text-sm text-slate-600 mt-2 mb-5">{report.disclaimer}</p>}
      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {['ChatGPT','Gemini','Claude','Perplexity'].map(name=><div key={name} className="bg-indigo-50 rounded-xl p-4 text-center"><p className="font-bold text-slate-900">{name}</p><p className={(report.engines[name]===null||report.engines[name]===undefined?"text-base":"text-3xl")+" font-extrabold text-indigo-700 mt-1"}>{report.engines[name]===null||report.engines[name]===undefined?'Pending':report.engines[name]}</p><p className="text-xs text-slate-500">{report.engines[name]===null||report.engines[name]===undefined?"Not finalized":"Estimated /100"}</p></div>)}
+      {['ChatGPT','Gemini','Claude','Perplexity'].map(name=>{const e=report.estimated_readiness?.engines[name];const value=report.engines[name]??e?.value;return <div key={name} className="bg-indigo-50 rounded-xl p-4 text-center"><p className="font-bold text-slate-900">{name}</p><p className="text-2xl sm:text-3xl font-extrabold text-indigo-700 mt-1">{value??(e?`${e.minimum}–${e.maximum}`:'Unavailable')}</p><p className="text-xs text-slate-500">{report.engines[name]!==null&&report.engines[name]!==undefined?'Estimated /100':e?.estimated?'Estimated, not verified':'Estimate unavailable'}</p>{e?.estimated&&<p className="text-xs text-slate-500 mt-1">{e.minimum}–{e.maximum} possible</p>}</div>})}
      </div>
-     {report.status==='incomplete'&&<p className="text-sm text-amber-800 mt-3">AI-platform readiness estimates cannot be finalized until all required website checks are verified. No AI platforms were queried.</p>}
+     {report.status==='incomplete'&&<p className="text-sm text-amber-800 mt-3">These are website-signal estimates, not live AI tests. Uncertainty is shown in the numerical ranges.</p>}
      <details className="mt-5 rounded-lg border border-slate-200 p-4 text-sm"><summary className="font-semibold text-slate-700 cursor-pointer">Technical crawler details</summary>
      <h4 className="font-semibold text-slate-900 mt-6 mb-2">Crawler permission signals</h4>
      <div className="grid sm:grid-cols-2 gap-2">{Object.entries(report.crawlerAccess).map(([name,status])=><div key={name} className="flex justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm"><span>{name}</span><strong>{status}</strong></div>)}</div>
@@ -144,15 +145,15 @@ export default function AIVisibilityChecker(){
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900">Score badge</h3>
-     <p className="text-sm text-slate-600 mt-2">Available only for complete, current reports.</p>
-     {report.status==='complete'&&!stale?<div className="mt-6">
+     <p className="text-sm text-slate-600 mt-2">Available for current verified scores or explicitly labeled estimates with at most five uncertain points.</p>
+     {(report.status==='complete'||report.estimated_readiness?.badge_eligible)&&!stale?<div className="mt-6">
       <h4 className="font-bold text-slate-900">Optional embeddable badge</h4>
-      <p className="text-slate-600 mt-2 text-sm">Select a design. The badge is public only when the production checker is activated. No AI certification is implied.</p>
+      <p className="text-slate-600 mt-2 text-sm">Choose a score-display design. Estimated badges are labeled as estimates, not AI certification.</p>
       <div className="flex gap-2 flex-wrap mt-4">{badgeStyles.map(style=><button type="button" key={style} onClick={()=>setBadgeStyle(style)} aria-pressed={badgeStyle===style} className={'rounded-lg border px-4 py-2 capitalize text-sm font-semibold '+(badgeStyle===style?'bg-indigo-600 text-white':'bg-white text-slate-700')}>{style}</button>)}</div>
       {badgePreview?<img src={badgePreview} alt={'Promptila '+badgeStyle+' style readiness badge'} className="mt-4 max-w-full" width={320} height={90}/>:<p className="mt-4 text-sm text-slate-600">Badge preview is unavailable.</p>}
       <label className="block font-semibold text-sm mt-4 text-slate-800">Copy embed code<textarea readOnly rows={3} className="w-full border rounded-lg p-3 mt-2 font-mono text-xs" value={badge}/></label>
       <button type="button" className="border rounded-lg px-4 py-2 text-sm font-semibold mt-2" onClick={()=>navigator.clipboard.writeText(badge)}>Copy badge embed code</button>
-     </div>:<p className="text-xs text-amber-800 mt-4">A verified score badge is available only for complete, current reports.</p>}
+     </div>:<p className="text-xs text-amber-800 mt-4">A score-display badge requires a current report with at most five uncertain points.</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-3">What we confirmed</h3>
