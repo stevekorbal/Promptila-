@@ -231,3 +231,50 @@ test('rule-based fix plan never recommends unverified checks',()=>{
  const checks=make('unverified');
  assert.deepEqual(buildFixPlan(checks),[]);
 });
+
+import {estimateReadiness} from '../api/_lib/instant-estimates.ts';
+test('bounded evidence policy estimates Big Lake without awarding missing four points',()=>{
+ const failures=new Set(['B1','B2','B3','B4','C4','E1','E2','E3','F3']);
+ const checks=make('pass').map(c=>({...c,status:(c.id==='D3'?'unverified':failures.has(c.id)?'fail':'pass') as Check['status']}));
+ const verified=calculate(checks);
+ assert.equal(verified.score,null);
+ assert.equal(verified.classification,null);
+ assert.ok(Object.values(verified.engines).every(v=>v===null));
+ const estimated=estimateReadiness(checks);
+ assert.equal(estimated?.status,'estimated');
+ assert.deepEqual(estimated?.overall,{value:63,minimum:61,maximum:65,unknown_points:4,estimated:true});
+ assert.equal(estimated?.engines.ChatGPT.value,68);
+ assert.deepEqual([estimated?.engines.ChatGPT.minimum,estimated?.engines.ChatGPT.maximum],[65,71]);
+ assert.equal(estimated?.engines.Gemini.value,67);
+ assert.equal(estimated?.engines.Claude.value,72);
+ assert.equal(estimated?.engines.Perplexity.value,72);
+ assert.equal(estimated?.badge_eligible,true);
+ const projected=publicResult({result:{checks,...verified,domain:'www.biglakecandy.com'}});
+ assert.equal(projected?.estimated_readiness?.overall?.value,63);
+});
+test('uncertainty above five points only yields ranges and no badge',()=>{
+ const checks=make('pass');
+ checks.find(c=>c.id==='A1')!.status='unverified';
+ checks.find(c=>c.id==='A2')!.status='unverified';
+ const report=estimateReadiness(checks);
+ assert.equal(report?.status,'range_only');
+ assert.equal(report?.overall.value,null);
+ assert.equal(report?.badge_eligible,false);
+ assert.ok(Object.values(report!.engines).every(v=>v.value===null&&v.maximum>=v.minimum));
+});
+test('fully verified reports retain actual scores and engine weights',()=>{
+ const checks=make('pass');
+ const original=calculate(checks),estimated=estimateReadiness(checks);
+ assert.equal(original.score,100);
+ assert.equal(estimated?.overall.value,100);
+ assert.equal(estimated?.overall.estimated,false);
+ assert.ok(Object.values(estimated!.engines).every(v=>v.value===100&&!v.estimated));
+});
+test('all four estimated score-display badges clearly disclaim verification',()=>{
+ for(const style of BADGE_STYLES){
+  const svg=badgeSvg('example.com',63,'2026-11-23T14:50:35Z',style,'https://www.promptila.com',true);
+  assert.match(svg,/Estimated/);
+  assert.match(svg,/Not verified/);
+  assert.doesNotMatch(svg,/AI.Ready achievement|AI.certified/i);
+ }
+});
