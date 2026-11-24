@@ -72,7 +72,7 @@ try{
    assert.ok(state.text.includes('Estimated result'),'Expected estimated result status badge');
    assert.ok(!state.text.includes('Incomplete scan'),'Old incomplete label should not appear with numerical estimate');
    assert.ok(state.text.includes('11/15'),'Confirmed business-identity category points missing');
-   assert.ok(state.text.includes('4 points unverified'),'Unverified points not labeled');
+   assert.ok(state.text.includes('4 additional points unverified'),'Unverified points not labeled');
    for(const number of ['68','67','72'])assert.ok(state.text.includes(number),'Missing numerical engine estimate '+number);
    assert.ok(state.text.includes('Score badge'),'Badge section missing');
    assert.ok(state.text.includes('Optional embeddable badge'),'Eligible estimated badge missing');
