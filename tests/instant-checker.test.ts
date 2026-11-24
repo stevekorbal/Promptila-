@@ -303,3 +303,41 @@ test('existing Stripe checkout metadata and prices remain unchanged after entryp
  assert.match(checkout,/unit_amount: 9900/);
  assert.match(checkout,/req\.method !== 'POST'/);
 });
+
+test('public free-report projection preserves scores but excludes technical check diagnoses',()=>{
+ const checks=make('pass').map(c=>({...c,evidence:'Sensitive implementation detail: copy JSON-LD canonical llms.txt and heading fix'}));
+ for(const c of checks){
+  if(['B1','B2','B3','B4','C4','E1','E2','E3','F3'].includes(c.id))c.status='fail';
+  if(c.id==='D3')c.status='unverified';
+ }
+ const calculated=calculate(checks);
+ const stored={result:{domain:'www.biglakecandy.com',scanned_at:'2026-11-24T15:00:00Z',
+  ...calculated,checks,provisional:{verified_points:61,unknown_points:4,minimum:61,maximum:65,is_provisional:true},
+  summary:{strengths:['Raw exact fix'],weaknesses:['Add JSON-LD'],uncertain:['About page HTTP 403'],unverified_count:1},
+  network_events:[{secret:'internal'}],network_errors:{private:'secret'},
+  robots_rules:{GPTBot:'allow'},probes:{GPTBot:{reason:'exact diagnosis'}},
+  llms_note:'llms.txt',rendering:{status:'complete',requests:4}}};
+ const projected=publicResult(stored);
+ assert.equal(projected?.score,null);
+ assert.equal(projected?.estimated_readiness?.overall.value,63);
+ assert.equal(projected?.estimated_readiness?.engines.ChatGPT.value,68);
+ assert.equal(projected?.areas_needing_improvement,4);
+ assert.equal(Object.keys(projected?.categories||{}).length,6);
+ assert.deepEqual(projected?.categories['Business identity'],{score:null,confirmed_points:11,unknown_points:4,max:15,status:'unverified'});
+ assert.equal(projected?.categories['Business information clarity'].score,0);
+ const serialized=JSON.stringify(projected);
+ for(const forbidden of ['checks','evidence','JSON-LD','canonical','llms.txt','heading fix','HTTP 403',
+   'network_events','network_errors','robots_rules','probes','rendering','B1','E1','F3','Raw exact fix','secret']){
+  assert.ok(!serialized.includes(forbidden),'Technical detail leaked: '+forbidden);
+ }
+ const original=JSON.stringify(stored.result);
+ assert.match(original,/JSON-LD/);assert.match(original,/network_events/);
+});
+test('public projection hides raw findings even for complete scoring reports',()=>{
+ const checks=make('pass').map(c=>({...c,evidence:'copy-ready detail for a paid blueprint'}));
+ const calculated=calculate(checks);
+ const projected=publicResult({result:{domain:'example.com',scanned_at:'2026-11-24T15:00:00Z',...calculated,checks}});
+ assert.equal(projected?.score,100);
+ assert.ok(Object.values(projected!.categories).every((x:any)=>x.score===x.max));
+ assert.ok(!JSON.stringify(projected).includes('copy-ready'));
+});
