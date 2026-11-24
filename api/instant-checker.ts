@@ -928,6 +928,7 @@ export function publicResult(row:any){
  if(!row||!row.result)return null;
  const r=row.result;
  const checks=Array.isArray(r.checks)?r.checks:[];
+ const estimate=estimateReadiness(checks);
  const categories:Record<string,{score:number|null;confirmed_points:number;unknown_points:number;max:number;status:string}>={};
  const strengths:string[]=[];const weaknesses:string[]=[];const uncertain:string[]=[];
  let areasNeedingImprovement=0;
@@ -950,7 +951,7 @@ export function publicResult(row:any){
  return {
   domain:r.domain,scanned_at:r.scanned_at,status:r.status,score:r.score,
   classification:r.classification,categories,engines:r.engines,
-  estimated_readiness:estimateReadiness(checks),
+  estimated_readiness:estimate?{status:estimate.status,overall:estimate.overall,engines:estimate.engines,badge_eligible:estimate.badge_eligible}:null,
   provisional:r.provisional?{
    verified_points:r.provisional.verified_points,
    unknown_points:r.provisional.unknown_points,
