@@ -1,10 +1,9 @@
 import React,{useEffect,useState} from 'react';
 import {Link,useParams} from 'react-router-dom';
-import {Globe,ShieldCheck,Search,Copy,CheckCircle2,AlertTriangle,Clock,ChevronDown} from 'lucide-react';
-import {buildFixPlan} from '../api/_lib/instant-fix-plan';
-type Check={id:string;category:string;label:string;points:number;status:'pass'|'fail'|'unverified';evidence:string};
-type Report={domain:string;url:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,{score:number|null;max:number;verified:number;total:number}>;engines:Record<string,number|null>;crawlerAccess:Record<string,string>;checks:Check[];js_dependent:boolean;elapsed_ms:number;rendering?:{status:'complete'|'failed'|'disabled'|'not_needed';pages:number;elapsed_ms:number;requests:number;bytes:number};disclaimer:string;llms_note:string;robots_rules?:Record<string,string>;probes?:Record<string,{status:string;reason:string;http_status?:number}>;summary?:{strengths:string[];weaknesses:string[];uncertain?:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean};estimated_readiness?:EstimatedReadiness|null};
+import {Globe,ShieldCheck,Search,Copy} from 'lucide-react';
 type EstimatedReadiness={status:'verified'|'estimated'|'range_only';overall:{value:number|null;minimum:number;maximum:number;unknown_points:number;estimated:boolean};engines:Record<string,{value:number|null;minimum:number;maximum:number;estimated:boolean}>;badge_eligible:boolean};
+type Category={score:number|null;confirmed_points:number;unknown_points:number;max:number;status:'on_track'|'needs_improvement'|'unverified'};
+type Report={domain:string;scanned_at:string;status:'complete'|'incomplete';score:number|null;classification:string|null;categories:Record<string,Category>;engines:Record<string,number|null>;disclaimer:string;summary:{strengths:string[];weaknesses:string[];uncertain:string[];unverified_count:number};provisional?:{verified_points:number;unknown_points:number;minimum:number;maximum:number;is_provisional:boolean}|null;estimated_readiness?:EstimatedReadiness|null;areas_needing_improvement:number};
 const reportUrl=(domain:string)=>'/ai-visibility-checker/report/'+encodeURIComponent(domain);
 async function readApiResponse(response:Response):Promise<any>{
  const contentType=response.headers.get('content-type')||'';
@@ -17,17 +16,16 @@ async function readApiResponse(response:Response):Promise<any>{
  if(!response.ok)throw Error(typeof result?.error==='string'?result.error:'The website checker is unavailable. Please try again.');
  return result;
 }
-const labels:{[key:string]:string}={pass:'Found',fail:'Needs attention',unverified:'Not verified'};
-const cats=['AI crawler access','Structured data','Semantic structure','Content and entity signals','llms.txt','Technical health'];
+const cats=['Discovery access','Business information clarity','Content clarity','Business identity','AI guidance signals','Website foundations'];
 const badgeStyles=['dark','light','shield','seal'] as const;
 type BadgeStyle=typeof badgeStyles[number];
 const whyMatters:Record<string,string>={
- 'AI crawler access':'Crawler rules can prevent automated services from requesting public pages; permissions do not guarantee AI recommendations.',
- 'Structured data':'Linked, valid structured data helps machines interpret the identity and nature of a page.',
- 'Semantic structure':'Clear titles, headings and readable content make a page easier to understand.',
- 'Content and entity signals':'Consistent business descriptions help distinguish a company from unrelated websites.',
- 'llms.txt':'This is an optional, voluntary convention; it is not required for AI recommendations.',
- 'Technical health':'Working HTTPS, canonical signals and indexability support ordinary website discovery.'
+ 'Discovery access':'Public access policies influence whether automated services may request your website. Permission does not guarantee AI recommendations.',
+ 'Business information clarity':'Clear website information helps automated systems recognize what your business does.',
+ 'Content clarity':'Well-organized pages make information easier for visitors and search systems to interpret.',
+ 'Business identity':'Consistent company information helps distinguish your business from others.',
+ 'AI guidance signals':'Optional machine-readable guidance can help describe useful resources. It is not a requirement for AI recommendations.',
+ 'Website foundations':'Reliable website signals help visitors and automated systems discover public content.'
 };
 export default function AIVisibilityChecker(){
  const {domain:reportDomain}=useParams<{domain?:string}>();
@@ -40,7 +38,6 @@ export default function AIVisibilityChecker(){
  const [lead,setLead]=useState({full_name:'',business_email:'',company_name:'',role_title:'',consent:false,marketing_consent:false});
  const [leadStatus,setLeadStatus]=useState('');
  const [leadLoading,setLeadLoading]=useState(false);
- const [expanded,setExpanded]=useState<string|null>(null);
  const [copied,setCopied]=useState(false);
  const [badgeStyle,setBadgeStyle]=useState<BadgeStyle>('dark');
  const [elapsed,setElapsed]=useState(0);
@@ -79,7 +76,6 @@ export default function AIVisibilityChecker(){
    setLeadStatus(d.message||'Request received.');
   }catch(e:any){setLeadStatus(e.message||'Unable to submit.');}finally{setLeadLoading(false);}
  }
- const fixPlan=report?buildFixPlan(report.checks):[];
  const input='w-full rounded-xl border border-slate-300 px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
  const fullLink=report?window.location.origin+reportUrl(report.domain):'';
  const badgeSrc=report?window.location.origin+'/api/instant-checker?badge=1&domain='+encodeURIComponent(report.domain)+'&style='+badgeStyle:'';
@@ -112,7 +108,7 @@ export default function AIVisibilityChecker(){
     </div>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <div className="flex flex-wrap justify-between gap-4 mb-5">
-      <div><p className="text-sm font-semibold text-indigo-600 uppercase">Website readiness report</p><h2 className="font-extrabold text-2xl text-slate-900 break-all">{report.domain}</h2><p className="text-sm text-slate-500 mt-1">Scanned {new Date(report.scanned_at).toLocaleString()} · {Math.round(report.elapsed_ms/1000)} seconds{cached?' · Cached result':''}</p></div>
+      <div><p className="text-sm font-semibold text-indigo-600 uppercase">Website readiness report</p><h2 className="font-extrabold text-2xl text-slate-900 break-all">{report.domain}</h2><p className="text-sm text-slate-500 mt-1">Scanned {new Date(report.scanned_at).toLocaleString()}{cached?' · Cached result':''}</p></div>
       <span className={'self-start rounded-full px-4 py-2 text-sm font-bold '+(report.status==='complete'?'text-emerald-700 bg-emerald-50':'text-amber-800 bg-amber-50')}>{report.status==='complete'?'Completed scan':report.estimated_readiness?.overall.value!==null&&report.estimated_readiness?.overall.value!==undefined?'Estimated result':'Incomplete scan'}</span>
      </div>
      <div className="flex flex-wrap gap-5 items-center bg-slate-50 rounded-xl p-5">
@@ -124,9 +120,6 @@ export default function AIVisibilityChecker(){
        <p className="text-slate-600 text-sm mt-2">{report.status==='complete'?'This score reflects our website checks, not actual AI recommendations.':(report.provisional?`${report.provisional.verified_points} confirmed points; ${report.provisional.unknown_points} unverified. Possible overall range: ${report.provisional.minimum}–${report.provisional.maximum}/100. An estimated score is not verified.`:'Some evidence could not be verified; no final score is assigned.')}</p>
       </div>
      </div>
-     <details className="mt-4 text-sm text-slate-600"><summary className="cursor-pointer font-semibold text-indigo-700">How we checked JavaScript-loaded content</summary>
-     {report.rendering?.status==='complete'?<p className="mt-4 rounded-xl bg-indigo-50 border border-indigo-200 p-4 text-sm text-slate-800"><strong>Browser-rendered evidence verified.</strong> A bounded browser checked {report.rendering.pages} same-site page(s) in {(report.rendering.elapsed_ms/1000).toFixed(1)} seconds. Some important content was verified only after JavaScript ran in a browser; it may be less accessible to AI crawlers that rely on the initial HTTP response. This does not prove any particular AI crawler cannot render JavaScript. Raw HTTP crawler checks remain separate, and outstanding uncertainty is shown below.</p>:report.js_dependent&&<p className="mt-4 bg-amber-50 text-amber-900 border border-amber-200 p-4 rounded-xl text-sm"><AlertTriangle className="inline mr-2" size={17}/>This site appears to load important content with JavaScript. Browser rendering {report.rendering?.status==='failed'?'could not verify the missing content':'was not available for this scan'}; unknown checks have not been marked as failures.</p>}
-     </details>
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900">Estimated AI-platform readiness</h3>
@@ -135,13 +128,6 @@ export default function AIVisibilityChecker(){
       {['ChatGPT','Gemini','Claude','Perplexity'].map(name=>{const e=report.estimated_readiness?.engines[name];const value=report.engines[name]??e?.value;return <div key={name} className="bg-indigo-50 rounded-xl p-4 text-center"><p className="font-bold text-slate-900">{name}</p><p className="text-2xl sm:text-3xl font-extrabold text-indigo-700 mt-1">{value??(e?`${e.minimum}–${e.maximum}`:'Unavailable')}</p><p className="text-xs text-slate-500">{report.engines[name]!==null&&report.engines[name]!==undefined?'Estimated /100':e?.estimated?'Estimated, not verified':'Estimate unavailable'}</p>{e?.estimated&&<p className="text-xs text-slate-500 mt-1">{e.minimum}–{e.maximum} possible</p>}</div>})}
      </div>
      {report.status==='incomplete'&&<p className="text-sm text-amber-800 mt-3">These are website-signal estimates, not live AI tests. Uncertainty is shown in the numerical ranges.</p>}
-     <details className="mt-5 rounded-lg border border-slate-200 p-4 text-sm"><summary className="font-semibold text-slate-700 cursor-pointer">Technical crawler details</summary>
-     <h4 className="font-semibold text-slate-900 mt-6 mb-2">Crawler permission signals</h4>
-     <div className="grid sm:grid-cols-2 gap-2">{Object.entries(report.crawlerAccess).map(([name,status])=><div key={name} className="flex justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm"><span>{name}</span><strong>{status}</strong></div>)}</div>
-     <p className="text-xs text-slate-500 mt-3">Google-Extended is a Google AI usage control, not a definitive Gemini crawler test.</p>
-     {report.robots_rules&&<details className="mt-5"><summary className="font-semibold text-slate-900 cursor-pointer">Seven crawler identities in robots.txt</summary><div className="mt-3 grid sm:grid-cols-2 gap-2">{Object.entries(report.robots_rules).map(([agent,permission])=><div key={agent} className="flex justify-between text-sm border rounded-lg px-3 py-2"><span>{agent}</span><strong>{permission}</strong></div>)}</div></details>}
-     {report.probes&&<div className="mt-5"><h4 className="font-semibold text-slate-900 mb-2">Live HTTP crawler user-agent probes</h4><p className="text-xs text-slate-500 mb-3">These are independent HTTP requests using crawler user-agent strings, not AI API requests. A successful response does not prove official crawler access.</p><div className="grid sm:grid-cols-2 gap-2">{Object.entries(report.probes as Record<string,{status:string;reason:string;http_status?:number}>).map(([name,probe])=><div key={name} className="border rounded-lg px-3 py-2 text-sm flex justify-between gap-2"><span>{name}</span><span className="text-right"><strong>{probe.status}</strong><span className="block text-xs text-slate-500">{probe.http_status??'No HTTP status'} · {probe.reason.replace(/_/g,' ')}</span></span></div>)}</div></div>}
-     </details>
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900">Score badge</h3>
@@ -156,44 +142,53 @@ export default function AIVisibilityChecker(){
      </div>:<p className="text-xs text-amber-800 mt-4">A score-display badge requires a current report with at most five uncertain points.</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
-     <h3 className="text-xl font-extrabold text-slate-900 mb-3">What we confirmed</h3>
-     {report.summary?<div className="grid sm:grid-cols-2 gap-5 text-sm">
-      <div><strong className="text-emerald-700">Verified strengths</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.strengths.length?report.summary.strengths.map(s=><li key={s}>{s}</li>):<li>No confirmed strengths available yet</li>}</ul></div>
-      <div><strong className="text-amber-800">Verified gaps</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.weaknesses.length?report.summary.weaknesses.map(s=><li key={s}>{s}</li>):<li>No confirmed gaps in inspected evidence</li>}</ul></div>
-     </div>:<p className="text-sm text-slate-500">See the website signals checklist below for confirmed findings.</p>}
-     {!!report.summary?.uncertain?.length&&<details className="mt-4 text-sm"><summary className="font-semibold text-slate-700 cursor-pointer">Checks awaiting evidence</summary><ul className="list-disc pl-5 mt-2 text-slate-600">{report.summary.uncertain.map(s=><li key={s}>{s}</li>)}</ul></details>}
-
-    </section>
-    <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
-     <h3 className="text-xl font-extrabold text-slate-900 mb-2">Website signals checklist</h3>
-     <p className="text-sm text-slate-500 mb-4">Found = confirmed present. Needs attention = confirmed issue. Not verified = insufficient evidence. Open a check for details.</p>
-     <h3 className="text-xl font-extrabold text-slate-900 mb-5">Six readiness categories</h3>
-     <div className="grid sm:grid-cols-2 gap-4">
-      {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4"><div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?`${item.score===null?report.checks.filter(check=>check.category===cat&&check.status==='pass').reduce((points,check)=>points+check.points,0):item.score}/${item.max}`:'Not available'}</span></div><p className="text-xs text-slate-500 mt-1">{item?.verified}/{item?.total} checks verified{report.checks.some(check=>check.category===cat&&check.status==='unverified')?` · ${report.checks.filter(check=>check.category===cat&&check.status==='unverified').reduce((points,check)=>points+check.points,0)} points unverified`:''}</p><div className="h-2 rounded-full bg-slate-200 mt-3 overflow-hidden"><div className="h-full bg-indigo-600" style={{width:`${item?100*(item.score===null?report.checks.filter(check=>check.category===cat&&check.status==='pass').reduce((points,check)=>points+check.points,0):item.score)/item.max:0}%`}}/></div><p className="text-xs text-slate-600 mt-3">{whyMatters[cat]}</p></div>;})}
+     <h3 className="text-xl font-extrabold text-slate-900">Your readiness overview</h3>
+     <p className="text-sm text-slate-600 mt-2 mb-4">{report.areas_needing_improvement} of six broad areas need improvement based on confirmed findings. An unverified area is never counted as a confirmed failure.</p>
+     <div className="grid sm:grid-cols-2 gap-5 text-sm">
+      <div><strong className="text-emerald-700">Areas working well</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.strengths.length?report.summary.strengths.map(s=><li key={s}>{s}</li>):<li>No fully verified strong areas yet</li>}</ul></div>
+      <div><strong className="text-amber-800">Areas needing improvement</strong><ul className="mt-2 list-disc pl-5 space-y-1 text-slate-700">{report.summary.weaknesses.length?report.summary.weaknesses.map(s=><li key={s}>{s}</li>):<li>No confirmed areas needing improvement</li>}</ul></div>
      </div>
-     {cats.map(cat=><div key={cat} className="mb-5"><h4 className="font-bold text-slate-900 mb-2">{cat}</h4><div className="divide-y border rounded-lg overflow-hidden">{report.checks.filter(c=>c.category===cat).map(c=><div key={c.id}><button type="button" className="flex w-full items-center gap-3 text-left p-3 bg-white hover:bg-slate-50" onClick={()=>setExpanded(expanded===c.id?null:c.id)}><span className={c.status==='pass'?'text-emerald-600':c.status==='fail'?'text-amber-700':'text-slate-500'}>{c.status==='pass'?<CheckCircle2 size={19}/>:c.status==='fail'?<AlertTriangle size={19}/>:<Clock size={19}/>}</span><span className="flex-1 text-sm font-medium text-slate-800">{c.label}</span><span className="text-xs text-slate-600">{labels[c.status]}</span><ChevronDown size={15}/></button>{expanded===c.id&&<div className="px-11 pb-4 text-sm text-slate-600"><p><strong>Evidence:</strong> {c.evidence}</p><p className="mt-2"><strong>Why it matters:</strong> {whyMatters[cat]}</p></div>}</div>)}</div></div>)}
-     <p className="text-xs text-slate-500">{report.llms_note}</p>
+     {report.summary.unverified_count>0&&<p className="text-sm text-slate-600 mt-4">{report.summary.unverified_count} check(s) could not be verified. They have not been treated as failures.</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
-     <h3 className="text-xl font-extrabold text-slate-900">Prioritized fix plan</h3>
-     <p className="text-sm text-slate-600 mt-2 mb-4">A short starting point based on confirmed failed checks—not the complete paid Blueprint.</p>
-     {fixPlan.length?<ol className="space-y-4">{fixPlan.map((item,i)=><li key={item.id} className="border rounded-xl p-4"><div className="flex gap-2 items-start justify-between flex-wrap"><h4 className="font-bold text-slate-900">{i+1}. {item.title}</h4><span className="text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-full px-3 py-1">{item.priority} priority · {item.impact} points</span></div><p className="text-sm text-slate-700 mt-3"><strong>Problem:</strong> {item.problem}</p><p className="text-sm text-slate-700 mt-2"><strong>Why it matters:</strong> {item.why}</p><p className="text-sm text-slate-700 mt-2"><strong>Suggested action:</strong> {item.action}</p></li>)}</ol>:<p className="text-sm text-slate-600">No confirmed issues to recommend fixing; unverified checks may still require review.</p>}
-
+     <h3 className="text-xl font-extrabold text-slate-900 mb-2">Six website readiness areas</h3>
+     <p className="text-sm text-slate-600 mb-5">These category results show where your business may benefit from improvement. Specific technical findings and corrections are reserved for your personalized optimization plan.</p>
+     <div className="grid sm:grid-cols-2 gap-4">
+      {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4">
+       <div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?`${item.confirmed_points}/${item.max}`:'Unavailable'}</span></div>
+       <p className="text-xs text-slate-500 mt-1">{item?.unknown_points? `${item.unknown_points} additional points unverified`:item?.status==='needs_improvement'?'Needs improvement':item?.status==='on_track'?'On track':'Not fully verified'}</p>
+       <div className="h-2 rounded-full bg-slate-200 mt-3 overflow-hidden"><div className="h-full bg-indigo-600" style={{width:`${item?100*item.confirmed_points/item.max:0}%`}}/></div>
+       <p className="text-sm text-slate-600 mt-3">{whyMatters[cat]}</p>
+      </div>})}
+     </div>
+    </section>
+    <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
+     <h3 className="text-xl font-extrabold text-slate-900">Your improvement plan preview</h3>
+     <p className="text-sm text-slate-600 mt-2 mb-4">We identified {report.areas_needing_improvement} broad improvement area(s). Your paid, website-specific plan identifies the precise findings and the work required to address them.</p>
+     <div className="space-y-3">{cats.filter(cat=>report.categories[cat]?.status==='needs_improvement').map(cat=><div key={cat} className="border border-slate-200 rounded-xl p-4"><h4 className="font-bold text-slate-900">{cat} — Needs improvement</h4><p className="text-sm text-slate-600 mt-2">{whyMatters[cat]} Our personalized optimization plan identifies the specific issues and provides the steps to address them.</p></div>)}</div>
+     {report.areas_needing_improvement===0&&<p className="text-sm text-slate-600">No confirmed category-level problems were found. Some evidence may still require verification.</p>}
+    </section>
+    <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
+     <h3 className="text-xl font-extrabold text-slate-900">Get your personalized AI visibility improvement plan</h3>
+     <div className="grid sm:grid-cols-2 gap-4 mt-5">
+      <div className="rounded-xl border border-indigo-200 p-5"><h4 className="text-lg font-bold text-slate-900">$299 — DIY AI Visibility Blueprint</h4><p className="text-sm text-slate-600 mt-3">A personalized, website-specific plan with detailed findings, exact corrections, prioritized steps, copy-ready recommendations, and implementation and verification guidance.</p><Link to="/checkout?service=diy" className="inline-flex mt-5 bg-indigo-600 text-white font-semibold rounded-lg px-4 py-3">Get DIY Blueprint</Link></div>
+      <div className="rounded-xl border border-indigo-200 p-5"><h4 className="text-lg font-bold text-slate-900">$999 — Done-For-You Optimization</h4><p className="text-sm text-slate-600 mt-3">Our team handles the website optimization implementation and verifies the work for you. Specific AI rankings and recommendations are not guaranteed.</p><Link to="/checkout?service=dfy" className="inline-flex mt-5 bg-indigo-600 text-white font-semibold rounded-lg px-4 py-3">Get Done-For-You</Link></div>
+     </div>
     </section>
     <section className="bg-indigo-950 text-white rounded-2xl p-6 sm:p-9">
-     <h3 className="text-2xl font-extrabold">Request a full audit or fix-plan invitation</h3>
-     <p className="text-indigo-100 mt-2 mb-6">For a complete audit or the $299 Blueprint, leave your details. This free report includes only high-level recommendations.</p>
+     <h3 className="text-2xl font-extrabold">Request a personalized review</h3>
+     <p className="text-indigo-100 mt-2 mb-6">Have questions about your results or which service fits your business? Leave your details and we'll follow up.</p>
      <form className="grid sm:grid-cols-2 gap-4" onSubmit={submitLead}>
       {([['full_name','Full name'],['business_email','Business email'],['company_name','Company name'],['role_title','Role or position']] as const).map(([field,label])=><label key={field} className="text-sm font-semibold">{label}<input required maxLength={field==='business_email'?254:120} type={field==='business_email'?'email':'text'} className={input+' mt-2 text-slate-900'} value={lead[field]} onChange={e=>setLead(old=>({...old,[field]:e.target.value}))}/></label>)}
-      <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input required type="checkbox" checked={lead.consent} onChange={e=>setLead(old=>({...old,consent:e.target.checked}))} className="mt-1"/><span>I agree to Promptila storing this information to respond to my fix-plan inquiry. See the <Link className="underline" to="/privacy-policy">Privacy Policy</Link>.</span></label>
-      <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input type="checkbox" checked={lead.marketing_consent} onChange={e=>setLead(old=>({...old,marketing_consent:e.target.checked}))} className="mt-1"/><span>Optional: I would also like to receive occasional Promptila marketing and product emails. This is not required to request my fix-plan invitation.</span></label>
-      <button disabled={leadLoading} className="sm:col-span-2 bg-white text-indigo-900 font-extrabold rounded-xl px-5 py-3 disabled:opacity-60">{leadLoading?'Submitting…':'Request fix-plan invitation'}</button>
+      <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input required type="checkbox" checked={lead.consent} onChange={e=>setLead(old=>({...old,consent:e.target.checked}))} className="mt-1"/><span>I agree to Promptila storing this information to respond to my request. See the <Link className="underline" to="/privacy-policy">Privacy Policy</Link>.</span></label>
+      <label className="sm:col-span-2 flex items-start gap-2 text-sm text-indigo-100"><input type="checkbox" checked={lead.marketing_consent} onChange={e=>setLead(old=>({...old,marketing_consent:e.target.checked}))} className="mt-1"/><span>Optional: I would also like to receive occasional Promptila marketing and product emails. This is not required to request my review.</span></label>
+      <button disabled={leadLoading} className="sm:col-span-2 bg-white text-indigo-900 font-extrabold rounded-xl px-5 py-3 disabled:opacity-60">{leadLoading?'Submitting…':'Request a review'}</button>
      </form>
      {leadStatus&&<p className="text-sm mt-4" role="status">{leadStatus}</p>}
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900">Permanent report link</h3>
-     <p className="text-sm text-slate-600 mt-2 mb-4">Only public website signals are shown. Personal lead details are never included.</p>
+     <p className="text-sm text-slate-600 mt-2 mb-4">Share your high-level readiness results. Detailed findings and contact information are never included.</p>
      <div className="flex gap-3 flex-wrap items-center">
       <Link to={reportUrl(report.domain)} className="text-indigo-700 break-all underline">{fullLink}</Link>
       <button type="button" onClick={async()=>{await navigator.clipboard.writeText(fullLink);setCopied(true)}} className="border rounded-lg py-2 px-3 text-sm flex items-center gap-2"><Copy size={15}/>{copied?'Copied':'Copy link'}</button>
