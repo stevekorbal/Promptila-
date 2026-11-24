@@ -1,9 +1,18 @@
 // Read-only and rejection-path production smoke. Never creates leads, payment sessions or charges.
 // Cached Big Lake scan remains a no-new-scan request.
 const base='https://www.promptila.com';
+function publicSummarySafe(d){
+ const r=d?.report;
+ if(!r||r.domain!=='www.biglakecandy.com'||r.estimated_readiness?.overall?.value!==63)return false;
+ if(Object.keys(r.categories||{}).length!==6||r.areas_needing_improvement!==4)return false;
+ const json=JSON.stringify(r);
+ return !['"checks":','"evidence":','"probes":','"robots_rules":','"network_events":','"network_errors":',
+   'JSON-LD','llms.txt','canonical','Heading hierarchy','HTTP 403','B1','F3','Prioritized fix plan'].some(x=>json.includes(x));
+}
+
 const paths=[
  {path:'/api/instant-checker?health=1',type:'json',verify:d=>d?.status==='ok'},
- {path:'/api/instant-checker?domain=www.biglakecandy.com',type:'json',verify:d=>d?.report?.domain==='www.biglakecandy.com'&&d?.report?.estimated_readiness?.overall?.value===63},
+ {path:'/api/instant-checker?domain=www.biglakecandy.com',type:'json',verify:d=>publicSummarySafe(d)},
  {path:'/api/instant-checker?badge=1&domain=www.biglakecandy.com&style=dark',type:'svg',verify:d=>d.includes('Estimated')&&d.includes('Not verified')},
  {path:'/api/instant-checker',type:'json',method:'POST',body:JSON.stringify({website:'https://www.biglakecandy.com'}),verify:d=>d?.cached===true&&d?.report?.domain==='www.biglakecandy.com'&&d?.report?.estimated_readiness?.overall?.value===63},
  {path:'/ai-visibility-checker/report/www.biglakecandy.com',type:'html',verify:d=>typeof d==='string'&&d.includes('<div id="root"')},
