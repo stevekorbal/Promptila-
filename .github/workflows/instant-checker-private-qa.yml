@@ -30,6 +30,9 @@ jobs:
       - name: Inspect About page HTTP discrepancy (branch only)
         if: github.ref == 'refs/heads/feature/instant-checker-render-fallback'
         run: node tests/instant-about-diagnostic.mjs
+      - name: Read-only Big Lake Candy evidence accuracy check (branch only)
+        if: github.ref == 'refs/heads/feature/instant-checker-render-fallback'
+        run: npx tsx tests/instant-biglake-accuracy-diagnostic.ts
       - name: Verify desktop and mobile checker report in headless Chromium
         run: npx tsx tests/instant-checker-ui-smoke.ts
       - name: Browser package footprint
