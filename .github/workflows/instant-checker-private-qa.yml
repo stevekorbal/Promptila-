@@ -4,6 +4,7 @@ on:
     branches:
       - feature/instant-checker-phase1-private
       - feature/instant-checker-render-fallback
+      - feature/instant-checker-public-summary
       - main
   workflow_dispatch:
 permissions:
