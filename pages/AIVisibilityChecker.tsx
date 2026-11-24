@@ -152,7 +152,7 @@ export default function AIVisibilityChecker(){
     </section>
     <section className="bg-white shadow-sm rounded-2xl border border-slate-200 p-6 sm:p-9">
      <h3 className="text-xl font-extrabold text-slate-900 mb-2">Six website readiness areas</h3>
-     <p className="text-sm text-slate-600 mb-5">These category results show where your business may benefit from improvement. Specific technical findings and corrections are reserved for your personalized optimization plan.</p>
+     <p className="text-sm text-slate-600 mb-5">These category results show where your business may benefit from improvement. Detailed findings and step-by-step corrections are reserved for your personalized optimization plan.</p>
      <div className="grid sm:grid-cols-2 gap-4">
       {cats.map(cat=>{const item=report.categories[cat];return <div key={cat} className="bg-slate-50 rounded-xl p-4">
        <div className="flex justify-between gap-3"><strong className="text-slate-800">{cat}</strong><span className="font-bold text-indigo-700">{item?`${item.confirmed_points}/${item.max}`:'Unavailable'}</span></div>
