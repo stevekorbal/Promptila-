@@ -913,18 +913,56 @@ async function database(){
  const {createClient}=await import('@supabase/supabase-js');
  return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
+// Public projection only. The full 25 checks, evidence and crawl diagnostics
+// remain unchanged in instant_scans.result for internal/paid use.
+// Never expose raw scan internals through any public GET, POST, report or badge.
+const PUBLIC_CATEGORIES=[
+ ['AI crawler access','Discovery access'],
+ ['Structured data','Business information clarity'],
+ ['Semantic structure','Content clarity'],
+ ['Content and entity signals','Business identity'],
+ ['llms.txt','AI guidance signals'],
+ ['Technical health','Website foundations']
+] as const;
 export function publicResult(row:any){
  if(!row||!row.result)return null;
  const r=row.result;
- // Explicit allowlist. Never include private lead records, internal IDs or raw HTML.
- return {domain:r.domain,url:r.url,scanned_at:r.scanned_at,version:r.version,status:r.status,
-  score:r.score,classification:r.classification,categories:r.categories,engines:r.engines,
-  crawlerAccess:r.crawlerAccess,checks:Array.isArray(r.checks)?r.checks.map((x:any)=>({id:x.id,category:x.category,label:x.label,points:x.points,status:x.status,evidence:typeof x.evidence==='string'?x.evidence.replace(/(?:ENOTFOUND|ECONNREFUSED|EHOSTUNREACH|ETIMEDOUT|EAI_AGAIN|ERR_[A-Z_]+|stream_error:[^ ]+)/g,'Connection or response could not be verified').slice(0,240):''})):[],js_dependent:r.js_dependent,
-  elapsed_ms:r.elapsed_ms,request_count:r.request_count,bytes_fetched:r.bytes_fetched,
-  disclaimer:r.disclaimer,llms_note:r.llms_note,
-  robots_rules:r.robots_rules,probes:r.probes,summary:r.summary,provisional:r.provisional,rendering:r.rendering,
-  estimated_readiness:estimateReadiness(r.checks)};
+ const checks=Array.isArray(r.checks)?r.checks:[];
+ const categories:Record<string,{score:number|null;confirmed_points:number;unknown_points:number;max:number;status:string}>={};
+ const strengths:string[]=[];const weaknesses:string[]=[];const uncertain:string[]=[];
+ let areasNeedingImprovement=0;
+ for(const [internal,visible] of PUBLIC_CATEGORIES){
+  const group=checks.filter((c:any)=>c.category===internal);
+  const earned=group.filter((c:any)=>c.status==='pass').reduce((sum:number,c:any)=>sum+(Number(c.points)||0),0);
+  const unknown=group.filter((c:any)=>c.status==='unverified').reduce((sum:number,c:any)=>sum+(Number(c.points)||0),0);
+  const failed=group.some((c:any)=>c.status==='fail');
+  const original=r.categories?.[internal];
+  const max=Number(original?.max) || ({'AI crawler access':25,'Structured data':20,'Semantic structure':20,'Content and entity signals':15,'llms.txt':10,'Technical health':10} as Record<string,number>)[internal];
+  const complete=group.length>0&&!group.some((c:any)=>c.status==='unverified');
+  categories[visible]={
+   score:complete?earned:null,confirmed_points:earned,unknown_points:unknown,
+   max,status:failed?'needs_improvement':unknown>0?'unverified':'on_track'
+  };
+  if(failed){areasNeedingImprovement++;weaknesses.push(visible);}
+  else if(unknown>0)uncertain.push(visible);
+  else if(group.length>0)strengths.push(visible);
+ }
+ return {
+  domain:r.domain,scanned_at:r.scanned_at,status:r.status,score:r.score,
+  classification:r.classification,categories,engines:r.engines,
+  estimated_readiness:estimateReadiness(checks),
+  provisional:r.provisional?{
+   verified_points:r.provisional.verified_points,
+   unknown_points:r.provisional.unknown_points,
+   minimum:r.provisional.minimum,maximum:r.provisional.maximum,
+   is_provisional:r.provisional.is_provisional
+  }:null,
+  areas_needing_improvement:areasNeedingImprovement,
+  summary:{strengths,weaknesses,uncertain,unverified_count:checks.filter((c:any)=>c.status==='unverified').length},
+  disclaimer:'Website-signal readiness estimates only. No AI models were queried. No rankings or recommendations are guaranteed.'
+ };
 }
+
 export function parseClaimToken(value:unknown):string|null{
  const m=typeof value==='string'?/^claimed:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(value):null;
  return m?.[1]||null;
