@@ -5,6 +5,7 @@ import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import {buildFixPlan} from '../api/_lib/instant-fix-plan.ts';
 import {estimateReadiness} from '../api/_lib/instant-estimates.ts';
+import {publicResult} from '../api/instant-checker.ts';
 
 const groups:[string,[string,number][]][]=[
  ['AI crawler access',[['A1',5],['A2',5],['A3',5],['A4',5],['A5',5]]],
@@ -35,6 +36,10 @@ const report={
  disclaimer:'Website-signal readiness estimates only. No AI models were queried.',
  llms_note:'llms.txt is voluntary and is not a requirement or guarantee for AI recommendations.'
 };
+const published=publicResult({result:report});
+assert.ok(published,'Public report projection missing');
+const serialized=JSON.stringify(published);
+for(const secret of ['checks','evidence','JSON-LD','Heading hierarchy','canonical','llms.txt','robots_rules','probes','network_events','prioritized'])assert.ok(!serialized.includes(secret),'Public API exposed '+secret);
 const server=spawn('node',['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173','--strictPort'],{stdio:'ignore'});
 let browser:Awaited<ReturnType<typeof puppeteer.launch>>|undefined;
 try{
@@ -53,7 +58,7 @@ try{
    await page.setRequestInterception(true);
    page.on('request',req=>{
     if(req.url().includes('/api/instant-checker?domain=')){
-     void req.respond({status:200,contentType:'application/json',body:JSON.stringify({report,stale:false})});
+     void req.respond({status:200,contentType:'application/json',body:JSON.stringify({report:published,stale:false})});
     }else void req.continue();
    });
    await page.goto('http://127.0.0.1:4173/ai-visibility-checker/report/www.biglakecandy.com',{waitUntil:'networkidle2',timeout:30000});
@@ -61,24 +66,30 @@ try{
    const state=await page.evaluate(()=>{
     const text=document.body.innerText;
     const heading=Array.from(document.querySelectorAll('h3')).map(e=>e.textContent?.trim());
-    const priorityText=Array.from(document.querySelectorAll('section')).find(e=>e.textContent?.includes('Prioritized fix plan'))?.innerText||'';
-    return {text,heading,priorityText,scroll:document.documentElement.scrollWidth,viewport:window.innerWidth};
+    return {text,heading,scroll:document.documentElement.scrollWidth,viewport:window.innerWidth};
    });
    assert.ok(state.text.includes('61–65'),'Provisional range missing');
    assert.ok(state.text.includes('Estimated result'),'Expected estimated result status badge');
    assert.ok(!state.text.includes('Incomplete scan'),'Old incomplete label should not appear with numerical estimate');
-   assert.ok(state.text.includes('11/15'),'Confirmed content-and-entity points missing');
+   assert.ok(state.text.includes('11/15'),'Confirmed business-identity category points missing');
    assert.ok(state.text.includes('4 points unverified'),'Unverified points not labeled');
    for(const number of ['68','67','72'])assert.ok(state.text.includes(number),'Missing numerical engine estimate '+number);
    assert.ok(state.text.includes('Score badge'),'Badge section missing');
    assert.ok(state.text.includes('Optional embeddable badge'),'Eligible estimated badge missing');
    assert.equal((state.text.match(/An estimated score is not verified/g)||[]).length,1,'Duplicate top-level estimate disclaimer');
-   assert.ok(state.text.includes('not required for AI recommendations'),'Optional llms.txt disclaimer missing');
-   assert.ok(!state.priorityText.includes('About or company information'),'Unverified About wrongly recommended');
-   let at=-1;for(const label of ['Make business information machine-readable','Consider publishing an llms.txt overview','Correct the heading hierarchy','Fix the homepage canonical URL']){const pos=state.priorityText.indexOf(label);assert.ok(pos>at, 'Wrong recommendation order: '+label);at=pos;}
+   assert.ok(state.text.includes('Your improvement plan preview'),'Paid-plan preview missing');
+   assert.ok(state.text.includes('Business information clarity'),'Broad improvement area missing');
+   assert.ok(state.text.includes('$299 — DIY AI Visibility Blueprint'),'DIY pricing missing');
+   assert.ok(state.text.includes('$999 — Done-For-You Optimization'),'DFY pricing missing');
+   for(const secret of ['Valid JSON-LD','Heading hierarchy','canonical URL','llms.txt','Prioritized fix plan','HTTP 403','JSON-LD','Specific technical findings']){
+    assert.ok(!state.text.includes(secret),'Detailed free-report leak '+secret);
+   }
+   const links=await page.$$eval('a[href*="/checkout?service="]',els=>els.map(el=>el.getAttribute('href')));
+   assert.ok(links.some(x=>x?.includes('service=diy')),'Existing DIY checkout route missing');
+   assert.ok(links.some(x=>x?.includes('service=dfy')),'Existing DFY checkout route missing');
    assert.ok(state.scroll<=state.viewport+2,`${name} horizontal overflow ${state.scroll} > ${state.viewport}`);
    await page.screenshot({path:'qa-screenshots/instant-checker-'+name+'.png',fullPage:true});
-   console.log('UI_SMOKE '+JSON.stringify({viewport:name,passed:true,overflow:state.scroll-state.viewport,fixes:plan.map(x=>x.id)}));
+   console.log('UI_SMOKE '+JSON.stringify({viewport:name,passed:true,overflow:state.scroll-state.viewport,paidLinks:true}));
   }finally{await page.close();}
  }
 }finally{if(browser)await browser.close();server.kill('SIGTERM');}
